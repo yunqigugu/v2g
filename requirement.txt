@@ -1,0 +1,19 @@
+# ============ 核心仿真与优化 ============
+numpy>=1.24.0
+pandas>=2.0.0
+pulp>=2.8.0            # MILP 建模；2.8+ 内置 HiGHS 求解器接口
+
+# ============ 不确定性建模 ============
+scikit-learn>=1.3.0    # RandomForestRegressor（uncertainty.py 使用）
+
+# ============ 可视化 ============
+matplotlib>=3.7.0
+scipy>=1.10.0          # make_interp_spline（plotting.py 图8 平滑）
+plotly>=5.18.0         # app.py 交互式图表
+
+# ============ Web 交互 ============
+streamlit>=1.30.0      # 含 st.cache_data / st.tabs / st.multiselect
+
+# ============ 数据导出 ============
+xlsxwriter>=3.1.0      # pd.ExcelWriter(engine='xlsxwriter')
+openpyxl>=3.1.0        # 备用 Excel 读写（兜底）
