@@ -57,8 +57,8 @@ def c1_rolling_solve(price, load, pv, fleet, cfg):
         )
         
         if idx > 0:
-            over_buy = [pulp.LpVariable(f"over_{t}", lowbound=0) for t in range(n_seg)]
-            under_buy = [pulp.LpVariable(f"under_{t}", lowbound=0) for t in range(n_seg)]
+            over_buy = [pulp.LpVariable(f"over_{t}", lowBound=0) for t in range(n_seg)]
+            under_buy = [pulp.LpVariable(f"under_{t}", lowBound=0) for t in range(n_seg)]
             for t in range(n_seg):
                 m += over_buy[t] >= v["pg"][t] - prev_pg_plan[t0 + t]
                 m += under_buy[t] >= prev_pg_plan[t0 + t] - v["pg"][t]
