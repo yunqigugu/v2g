@@ -74,7 +74,7 @@ if run_btn:
         try:
             # ★ 直接调用核心函数，不需要任何缓存装饰器
             # export_files=False 防止在网页端生成大体积Excel文件拖垮内存
-            res = run_simulation(copy.deepcopy(cfg), export_files=False)
+            res = run_simulation(copy.deepcopy(cfg))
             st.session_state['sim_data'] = res
             st.success("✅ 仿真计算完成！")
         except Exception as e:
