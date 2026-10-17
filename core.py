@@ -115,31 +115,31 @@ def _build_milp(price, load, pv, fleet, cfg, mode, e_bess_init=None, e_ev_init=N
 
     m = pulp.LpProblem(f"v2g_{mode}", pulp.LpMinimize)
 
-    pg   = [pulp.LpVariable(f"pg_{t}",  lowbound=0) for t in range(n)]
-    pg_emerg = [pulp.LpVariable(f"pg_emerg_{t}", lowbound=0) for t in range(n)]
-    pc_b = [pulp.LpVariable(f"pcb_{t}", lowbound=0, upBound=pc_max) for t in range(n)]
-    pd_b = [pulp.LpVariable(f"pdb_{t}", lowbound=0, upBound=pd_max) for t in range(n)]
-    pu   = [pulp.LpVariable(f"pu_{t}",  lowbound=0) for t in range(n)]
-    eb_b = [pulp.LpVariable(f"ebb_{t}", lowbound=E_min, upBound=E_max) for t in range(n + 1)]
+    pg   = [pulp.LpVariable(f"pg_{t}",  lowBound=0) for t in range(n)]
+    pg_emerg = [pulp.LpVariable(f"pg_emerg_{t}", lowBound=0) for t in range(n)]
+    pc_b = [pulp.LpVariable(f"pcb_{t}", lowBound=0, upBound=pc_max) for t in range(n)]
+    pd_b = [pulp.LpVariable(f"pdb_{t}", lowBound=0, upBound=pd_max) for t in range(n)]
+    pu   = [pulp.LpVariable(f"pu_{t}",  lowBound=0) for t in range(n)]
+    eb_b = [pulp.LpVariable(f"ebb_{t}", lowBound=E_min, upBound=E_max) for t in range(n + 1)]
     zc_b = [pulp.LpVariable(f"zcb_{t}", cat="Binary") for t in range(n)]
     zd_b = [pulp.LpVariable(f"zdb_{t}", cat="Binary") for t in range(n)]
 
     ps = z_buy = z_sell = None
     if use_sell:
-        ps     = [pulp.LpVariable(f"ps_{t}",  lowbound=0) for t in range(n)]
+        ps     = [pulp.LpVariable(f"ps_{t}",  lowBound=0) for t in range(n)]
         z_buy  = [pulp.LpVariable(f"zb_{t}",  cat="Binary") for t in range(n)]
         z_sell = [pulp.LpVariable(f"zs_{t}",  cat="Binary") for t in range(n)]
 
     pce = ebe = zce = pde = zde = None
     ev_slack = []
     if use_ev_var and n_ev > 0:
-        pce = [[pulp.LpVariable(f"pce_{i}_{t}", lowbound=0, upBound=fleet["p_chg_max"][i]) for t in range(n)] for i in range(n_ev)]
-        ebe = [[pulp.LpVariable(f"ebe_{i}_{t}", lowbound=cfg["ev_soc_min"] * fleet["e_cap"][i], upBound=cfg["ev_soc_max"] * fleet["e_cap"][i]) for t in range(n + 1)] for i in range(n_ev)]
+        pce = [[pulp.LpVariable(f"pce_{i}_{t}", lowBound=0, upBound=fleet["p_chg_max"][i]) for t in range(n)] for i in range(n_ev)]
+        ebe = [[pulp.LpVariable(f"ebe_{i}_{t}", lowBound=cfg["ev_soc_min"] * fleet["e_cap"][i], upBound=cfg["ev_soc_max"] * fleet["e_cap"][i]) for t in range(n + 1)] for i in range(n_ev)]
         zce = [[pulp.LpVariable(f"zce_{i}_{t}", cat="Binary") for t in range(n)] for i in range(n_ev)]
         if use_ev_dis:
-            pde = [[pulp.LpVariable(f"pde_{i}_{t}", lowbound=0, upBound=fleet["p_dis_max"][i]) for t in range(n)] for i in range(n_ev)]
+            pde = [[pulp.LpVariable(f"pde_{i}_{t}", lowBound=0, upBound=fleet["p_dis_max"][i]) for t in range(n)] for i in range(n_ev)]
             zde = [[pulp.LpVariable(f"zde_{i}_{t}", cat="Binary") for t in range(n)] for i in range(n_ev)]
-        ev_slack = [pulp.LpVariable(f"slack_{i}", lowbound=0) for i in range(n_ev)]
+        ev_slack = [pulp.LpVariable(f"slack_{i}", lowBound=0) for i in range(n_ev)]
 
     ev_unord = unordered_charge_profile(fleet, dt) if mode == "A2" and fleet else None
 
