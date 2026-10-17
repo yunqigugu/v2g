@@ -17,3 +17,5 @@ streamlit>=1.30.0      # 含 st.cache_data / st.tabs / st.multiselect
 # ============ 数据导出 ============
 xlsxwriter>=3.1.0      # pd.ExcelWriter(engine='xlsxwriter')
 openpyxl>=3.1.0        # 备用 Excel 读写（兜底）
+#============= 画图 =============
+plotly                 #网页输入——得到图形
