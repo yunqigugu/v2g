@@ -1,10 +1,8 @@
 """
 main.py — 总入口
-读 CONFIG → 按 A 组单选调度求解器 → 按 B/C 组开关依次叠加
-→ evaluator → 返回数据给 Streamlit 或 本地出图
 """
-
 import os
+import copy
 import numpy as np
 import pandas as pd
 
@@ -21,7 +19,7 @@ from core import (
     synth_price, synth_load, synth_pv, gen_ev_fleet,
     solve_day, evaluate, allocate_revenue,
     prebuild_ev_pool, get_ev_fleet_slice,
-    solve_a1_bess_only, solve_a2_unordered, solve_a3_smart, solve_a4_v2g,
+    solve_a3_smart, solve_a4_v2g
 )
 from uncertainty import apply_b_uncertainty
 from enhancement import apply_c_setup
@@ -32,7 +30,6 @@ from plotting import (
 )
 
 def empty_res(cost=0.0):
-    """用于 A1~A4 中某些场景求解失败时的兜底空数据"""
     return {
         "cost": cost, "pg": np.zeros(48), "ps": np.zeros(48), "pu": np.zeros(48),
         "pc_b": np.zeros(48), "pd_b": np.zeros(48), "eb_b": np.zeros(49),
@@ -40,7 +37,7 @@ def empty_res(cost=0.0):
     }
 
 # ============================================================
-# 多情景对比（A 组四个全部跑一遍）
+# 多情景对比
 # ============================================================
 def run_all_a(day_idx, cfg):
     price = synth_price(cfg)
@@ -50,20 +47,82 @@ def run_all_a(day_idx, cfg):
     price, load, pv, fleet = apply_b_uncertainty(price, load, pv, fleet, day_idx, cfg)
 
     out = {}
-    out["A1"] = solve_a1_bess_only(price, load, pv, cfg) or empty_res()
-    # A2 若无解（被变压器卡死），赋予极高惩罚成本 999999
-    out["A2"] = solve_a2_unordered(price, load, pv, fleet, cfg) or empty_res(999999.0)
-    out["A3"] = solve_a3_smart(price, load, pv, fleet, cfg) or empty_res()
-    out["A4"] = solve_a4_v2g(price, load, pv, fleet, cfg) or empty_res()
+    for a_idx in [1, 2, 3, 4]:
+        cfg_a = copy.deepcopy(cfg)
+        cfg_a["A"] = a_idx
+        res = solve_day(price, load, pv, fleet, cfg_a)
+        
+        if res is None:
+            out[f"A{a_idx}"] = empty_res(999999.0 if a_idx == 2 else 0.0)
+        else:
+            out[f"A{a_idx}"] = res
+            
     return {"price": price, "load": load, "pv": pv, "fleet": fleet, "res": out}
 
 # ============================================================
-# 核心计算引擎：返回所有底层数据
+# EV 规模扫描
 # ============================================================
-def run_simulation(cfg):
+def sweep_n_ev(cfg, out_dir):
+    orig_n_ev   = cfg["n_ev"]
+    orig_n_days = cfg["n_days"]
+    orig_gap    = cfg["mip_gap"]
+    orig_b4     = cfg.get("B4_ev", False)
+
+    cfg["n_days"]  = cfg["sweep_n_days"]
+    cfg["mip_gap"] = 0.05
+    cfg["B4_ev"]   = False
+    cfg["solve_time_limit"] = 60
+
+    master_n = max(cfg["sweep_n_ev"]) + 100
+    prebuild_ev_pool(cfg, master_n=master_n)
+
+    rows = []
+    for n in cfg["sweep_n_ev"]:
+        cfg["n_ev"] = n
+        total_a3, total_a4 = 0.0, 0.0
+        ok = True
+        for d in range(cfg["n_days"]):
+            price = synth_price(cfg)
+            load  = synth_load(d, cfg)
+            pv    = synth_pv(d, cfg)
+            fleet = get_ev_fleet_slice(d, n_use=n)
+            price, load, pv, fleet = apply_b_uncertainty(price, load, pv, fleet, d, cfg)
+
+            r3 = solve_a3_smart(price, load, pv, fleet, cfg)
+            r4 = solve_a4_v2g(price, load, pv, fleet, cfg)
+            if r3 is None or r4 is None:
+                ok = False; break
+            total_a3 += r3["cost"]
+            total_a4 += r4["cost"]
+        if not ok:
+            continue
+
+        v2g_gain = total_a3 - total_a4
+        per_ev   = v2g_gain / n / cfg["n_days"] if n > 0 else 0.0
+        rows.append({
+            "n_ev": n, "total_a3": total_a3, "total_a4": total_a4,
+            "v2g_gain": v2g_gain, "per_ev": per_ev, "total_cost": total_a4,
+        })
+        # ★ 删除了一切 print 语句
+
+    cfg["n_ev"]    = orig_n_ev
+    cfg["n_days"]  = orig_n_days
+    cfg["mip_gap"] = orig_gap
+    cfg["B4_ev"]   = orig_b4
+
+    df = pd.DataFrame(rows)
+    df.to_excel(os.path.join(out_dir, "EV规模扫描.xlsx"), index=False)
+    return df
+
+# ============================================================
+# 核心计算引擎
+# ============================================================
+def run_simulation(cfg, export_files=True):
     tag = cfg.get("run_tag") or make_run_tag(cfg)
     out_dir = os.path.join(cfg.get("output_root", "outputs"), tag)
-    os.makedirs(out_dir, exist_ok=True)
+    
+    if export_files:
+        os.makedirs(out_dir, exist_ok=True)
     cfg["output_dir"] = out_dir
 
     daily_all = {"A1": [], "A2": [], "A3": [], "A4": []}
@@ -83,29 +142,20 @@ def run_simulation(cfg):
             daily_all[k].append(r["cost"])
             impact_all[k].append(m)
             
-            # 收集 48 个时段的细节数据（大宽表）
             for t in range(len(day_out["price"])):
                 all_records.append({
-                    "Day": d + 1,
-                    "Slot": t,
-                    "Hour": t * cfg.get("dt_h", 0.5),
-                    "Scenario": k,
-                    "Price": day_out["price"][t],
-                    "Load": day_out["load"][t],
-                    "PV": day_out["pv"][t],
-                    "Grid_Buy": r["pg"][t],
-                    "Grid_Sell": r["ps"][t],
-                    "BESS_Charge": r["pc_b"][t],
-                    "BESS_Discharge": r["pd_b"][t],
+                    "Day": d + 1, "Slot": t, "Hour": t * cfg.get("dt_h", 0.5),
+                    "Scenario": k, "Price": day_out["price"][t],
+                    "Load": day_out["load"][t], "PV": day_out["pv"][t],
+                    "Grid_Buy": r["pg"][t], "Grid_Sell": r["ps"][t],
+                    "BESS_Charge": r["pc_b"][t], "BESS_Discharge": r["pd_b"][t],
                     "BESS_SOC": r["eb_b"][t+1] if len(r["eb_b"]) > t+1 else 0,
-                    "EV_Charge": r["p_charge_ev"][t],
-                    "EV_Discharge": r["p_discharge_ev"][t],
+                    "EV_Charge": r["p_charge_ev"][t], "EV_Discharge": r["p_discharge_ev"][t],
                 })
 
     daily_df = pd.DataFrame({k: pd.Series(v) for k, v in daily_all.items()})
     daily_df.index = np.arange(1, len(daily_df) + 1)
     daily_df.index.name = "Day"
-    daily_df.to_excel(os.path.join(out_dir, "每日成本对比.xlsx"))
 
     df_timeseries = pd.DataFrame(all_records)
 
@@ -120,11 +170,14 @@ def run_simulation(cfg):
             keys = list(impact_all[k][0].keys())
             impact_summary[k] = {kk: float(np.mean([m[kk] for m in impact_all[k]])) for kk in keys}
     df_impact = pd.DataFrame(impact_summary).T
-    df_impact.to_excel(os.path.join(out_dir, "电网冲击指标.xlsx"))
 
     total_gain = delta_s2_s3
     share_df = allocate_revenue(total_gain, cfg)
-    share_df.to_excel(os.path.join(out_dir, "V2G收益分配表.xlsx"), index=False)
+
+    if export_files:
+        daily_df.to_excel(os.path.join(out_dir, "每日成本对比.xlsx"))
+        df_impact.to_excel(os.path.join(out_dir, "电网冲击指标.xlsx"))
+        share_df.to_excel(os.path.join(out_dir, "V2G收益分配表.xlsx"), index=False)
 
     return {
         "out_dir": out_dir, "tag": tag, "daily_df": daily_df,
@@ -134,22 +187,19 @@ def run_simulation(cfg):
         "delta": (delta_s0_s1, delta_s1_s2, delta_s2_s3)
     }
 
-# ============================================================
-# 终端本地一键运行模式
-# ============================================================
 def main():
     cfg = apply_c_setup(CONFIG)
     print(f"输出目录: {os.path.join(cfg.get('output_root', 'outputs'), cfg.get('run_tag') or make_run_tag(cfg))}")
     print("=" * 60)
     
-    res = run_simulation(cfg)
+    res = run_simulation(cfg, export_files=True)
     totals = res["totals"]
     delta_s0_s1, delta_s1_s2, delta_s2_s3 = res["delta"]
 
     print("\n=== 总成本 ===")
     for k in ["A1", "A2", "A3", "A4"]: print(f"  {k}: {totals[k]:.2f} 元")
     print("\n=== 增量分析 ===")
-    print(f"A1-A2 (无序 EV): {delta_s0_s1:+.2f} 元 | A2-A3 (智能充电): {delta_s1_s2:+.2f} 元 | A3-A4 (V2G): {delta_s2_s3:+.2f} 元")
+    print(f"A1-A2: {delta_s0_s1:+.2f} 元 | A2-A3: {delta_s1_s2:+.2f} 元 | A3-A4: {delta_s2_s3:+.2f} 元")
 
     out_dir = res["out_dir"]
     print("\n正在生成报告图表...")
@@ -177,7 +227,6 @@ def main():
 
     print("\n=== EV 规模扫描 ===")
     try:
-        from main import sweep_n_ev  # 确保 sweep_n_ev 函数存在
         sweep_df = sweep_n_ev(cfg, out_dir)
         if not sweep_df.empty: plot_ev_sweep(sweep_df, out_dir)
     except Exception as e:

@@ -5,17 +5,10 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import io
-import zipfile
 
 from config import CONFIG
 from main import run_simulation
 from plotting import plot_revenue_share, plot_daily_cost
-
-# ★ ================= 新增：定义全局缓存函数 =================
-@st.cache_data(show_spinner=False)
-def cached_run_simulation(cfg_dict):
-    # 使用 deepcopy 防止缓存被外部意外修改
-    return run_simulation(copy.deepcopy(cfg_dict))
 
 # ================= 页面基础配置 =================
 st.set_page_config(page_title="V2G 微网仿真控制台", layout="wide", page_icon="⚡")
@@ -37,9 +30,9 @@ with st.sidebar:
         index=3
     )
     
-    # 滑块输入
-    n_ev = st.slider("EV 数量 (辆)", min_value=10, max_value=1500, value=1500, step=10)
-    n_days = st.slider("仿真天数 (天)", min_value=1, max_value=30, value=5, step=1)
+    # 滑块输入（★ 默认值调低，防止刚打开测试时卡死）
+    n_ev = st.slider("EV 数量 (辆)", min_value=10, max_value=1500, value=200, step=10)
+    n_days = st.slider("仿真天数 (天)", min_value=1, max_value=30, value=2, step=1)
     sell_ratio = st.slider("售电比例 (0.1~1.0)", min_value=0.1, max_value=1.0, value=0.60, step=0.05)
     emergency_ratio = st.slider("紧急购电惩罚倍数 (5λ)", min_value=1.0, max_value=10.0, value=5.0, step=0.5)
 
@@ -79,12 +72,16 @@ if run_btn:
 
     with st.spinner(f"正在求解 {n_days} 天、{n_ev} 辆车的 MILP 模型..."):
         try:
-            # ★ 替换为调用缓存函数
-            res = cached_run_simulation(cfg)
+            # ★ 直接调用核心函数，不需要任何缓存装饰器
+            # export_files=False 防止在网页端生成大体积Excel文件拖垮内存
+            res = run_simulation(copy.deepcopy(cfg), export_files=False)
             st.session_state['sim_data'] = res
             st.success("✅ 仿真计算完成！")
         except Exception as e:
+            import traceback
             st.error(f"❌ 仿真运行出错: {e}")
+            # 将完整的错误堆栈打印到网页上，方便排查
+            st.code(traceback.format_exc()) 
 
 # ================= 结果展示区 =================
 if st.session_state['sim_data'] is not None:
@@ -104,7 +101,7 @@ if st.session_state['sim_data'] is not None:
     # 2. 结果 Tabs
     tab1, tab2, tab3, tab4 = st.tabs(["📈 交互式微观对比 (任意拼图)", "📉 宏观日度成本", "💰 收益分配", "💾 数据下载"])
 
-    # ---------- Tab 1: 交互式微观对比 (任意拼图) ----------
+    # ---------- Tab 1: 交互式微观对比 ----------
     with tab1:
         st.markdown("#### 48 时段运行细节自由对比")
         st.write("您可以任意叠加：负荷、光伏、电网购售、EV充放、BESS充放。鼠标悬停可查看精准数值，支持框选缩放与图例隐藏。")
@@ -129,27 +126,22 @@ if st.session_state['sim_data'] is not None:
         df_day = df_day[(df_day["Day"] == t_day) & (df_day["Scenario"].isin(t_scens))]
         
         if not df_day.empty and y_cols:
-            # 长表转换
             df_melt = df_day.melt(id_vars=["Hour", "Scenario", "Price"], value_vars=y_cols, var_name="指标", value_name="功率")
             df_melt["指标"] = df_melt["指标"].map(y_options)
             
-            # 创建 Plotly 双 Y 轴图（主轴：功率；副轴：电价）
             fig = go.Figure()
-            
-            # 1. 画功率曲线（左轴）
             colors = px.colors.qualitative.Plotly
+            
             for i, (metric, group) in enumerate(df_melt.groupby("指标")):
                 for scen in t_scens:
                     scen_data = group[df_melt["Scenario"] == scen] if "Scenario" in group else group
                     if scen_data.empty: continue
-                    # 为了避免颜色太乱，同一指标用同色，不同场景用虚线/实线区分
                     fig.add_trace(go.Scatter(
                         x=scen_data["Hour"], y=scen_data["功率"],
                         name=f"{scen} - {metric}", mode="lines",
                         line=dict(color=colors[i % len(colors)], dash='solid' if scen == "A4" else 'dot')
                     ))
             
-            # 2. 画电价曲线（右轴，用灰色虚线表示）
             df_price = df_day.drop_duplicates("Hour")
             fig.add_trace(go.Scatter(
                 x=df_price["Hour"], y=df_price["Price"], name="电价 (元/kWh)",
@@ -170,7 +162,6 @@ if st.session_state['sim_data'] is not None:
     # ---------- Tab 2: 宏观日度成本 ----------
     with tab2:
         st.markdown("#### 日度成本趋势")
-        # 借用 matplotlib 画图
         fig_mat = plot_daily_cost(res["daily_df"], out_dir=None)
         st.pyplot(fig_mat)
 
@@ -184,7 +175,6 @@ if st.session_state['sim_data'] is not None:
     with tab4:
         st.markdown("#### 下载仿真结果")
         
-        # 1. 下载 Excel 大宽表
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             res["df_timeseries"].to_excel(writer, sheet_name='48时段详细数据', index=False)
@@ -200,7 +190,6 @@ if st.session_state['sim_data'] is not None:
             use_container_width=True
         )
         
-        # 2. 下载汇总 TXT
         txt_content = f"V2G 仿真汇总\n{'='*30}\n"
         for k, v in totals.items():
             txt_content += f"{k} 总成本: {v:.2f} 元\n"

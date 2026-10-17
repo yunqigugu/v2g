@@ -322,7 +322,7 @@ def allocate_revenue(total_gain, cfg):
     return pd.DataFrame(rows)
 
 # ============================================================
-# EV 母车队池（供规模扫描使用）★ 这些是保证不报错的核心
+# EV 母车队池（供规模扫描使用）
 # ============================================================
 _GLOBAL_EV_POOL = {}
 
@@ -372,7 +372,7 @@ def prebuild_ev_pool(cfg, master_n=1500):
     _GLOBAL_EV_POOL.clear()
     for d in range(cfg["n_days"]):
         _GLOBAL_EV_POOL[d] = _gen_ev_fleet_master(d, cfg, master_n)
-    print(f"[母车队池] 已生成 {cfg['n_days']} 天 × {master_n} 辆")
+    # ★ 删除了此处的 print 语句！
 
 def get_ev_fleet_slice(day_idx, n_use):
     pool = _GLOBAL_EV_POOL[day_idx]
