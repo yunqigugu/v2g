@@ -9,7 +9,7 @@ import traceback
 
 from config import CONFIG
 from main import run_simulation
-from plotting import plot_revenue_share, plot_daily_cost
+# 去掉了 plotting 的依赖，彻底告别 Matplotlib 乱码
 
 # ================= 页面基础配置与全局美化 CSS =================
 st.set_page_config(page_title="V2G 微网仿真控制台", layout="wide", page_icon="⚡")
@@ -125,7 +125,7 @@ if st.session_state['sim_data'] is not None:
     res = st.session_state['sim_data']
     totals = res["totals"]
     
-    # 1. 顶部核心指标看板（装入卡片容器中）
+    # 1. 顶部核心指标看板
     with st.container(border=True):
         st.markdown("### 📊 核心指标看板 (总成本对比)")
         col1, col2, col3, col4 = st.columns(4)
@@ -175,7 +175,7 @@ if st.session_state['sim_data'] is not None:
                 
                 for i, (metric, group) in enumerate(df_melt.groupby("指标")):
                     for scen in t_scens:
-                        scen_data = group[df_melt["Scenario"] == scen] if "Scenario" in group else group
+                        scen_data = group[group["Scenario"] == scen]
                         if scen_data.empty: continue
                         fig.add_trace(go.Scatter(
                             x=scen_data["Hour"], y=scen_data["功率"],
@@ -206,35 +206,49 @@ if st.session_state['sim_data'] is not None:
         with st.container(border=True):
             st.markdown("#### 日度成本趋势对比")
             
-            # 使用 Plotly 画日度成本折线图
-            # 假设你的 daily_df 里面包含 Day 和 A1, A2, A3, A4 几列
-            df_daily = res["daily_df"]
+            df_daily = res["daily_df"].copy()
             
-            # 把宽表转成适合 Plotly 画多线的长表 (如果已经是长表请忽略这一步)
-            df_melt = df_daily.melt(id_vars=["Day"], value_vars=["A1", "A2", "A3", "A4"], 
+            # 核心修复：把原来的 index (天数) 变成普通列
+            df_daily = df_daily.reset_index()
+            
+            # 兼容处理：如果列名不是 "Day" 而是 "index" 或其他，强制重命名
+            if "Day" not in df_daily.columns:
+                df_daily = df_daily.rename(columns={df_daily.columns[0]: "Day"})
+            
+            # 提取 A1~A4 列画图
+            valid_cols = [c for c in ["A1", "A2", "A3", "A4"] if c in df_daily.columns]
+            df_melt = df_daily.melt(id_vars=["Day"], value_vars=valid_cols, 
                                     var_name="场景", value_name="成本 (元)")
             
             fig_daily = px.line(
                 df_melt, x="Day", y="成本 (元)", color="场景", 
                 markers=True, title="各场景日度运行成本对比"
             )
-            fig_daily.update_layout(template="plotly_white", margin=dict(t=50, b=20, l=20, r=20))
+            fig_daily.update_layout(
+                template="plotly_white", 
+                margin=dict(t=50, b=20, l=20, r=20),
+                xaxis_title="天数",
+                yaxis_title="日总成本 (元)"
+            )
             st.plotly_chart(fig_daily, use_container_width=True)
 
-        # ---------- Tab 3: 收益分配 ----------
+    # ---------- Tab 3: 收益分配 ----------
     with tab3:
         with st.container(border=True):
             st.markdown("#### V2G 总收益分红")
             
-            # 使用 Plotly 画饼图（完美支持中文）
-            share_df = res["share_df"]
+            # 核心修复：你的 share_df 只有 "角色" 和 "比例"，我们需要算一下金额
+            share_df = res["share_df"].copy()
+            share_df["金额(元)"] = share_df["比例"] * res['total_gain']
+            
+            # 使用 Plotly 画环形图
             fig_pie = px.pie(
                 share_df, 
                 values='金额(元)', 
                 names='角色', 
                 title=f"V2G 总收益分红 (总计 {res['total_gain']:.0f} 元)",
                 color_discrete_sequence=px.colors.qualitative.Pastel,
-                hole=0.4 # 变成环形图更高级
+                hole=0.4 # 变成环形图
             )
             fig_pie.update_traces(textposition='inside', textinfo='percent+label')
             fig_pie.update_layout(margin=dict(t=50, b=20, l=20, r=20))
