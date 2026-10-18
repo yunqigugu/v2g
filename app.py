@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import copy
 import pandas as pd
 import numpy as np
@@ -70,9 +71,11 @@ custom_css = """
     }
 
     /* 4. 发光光标 */
+    /* 默认：发光的青色十字星准星 */
     html, body, [class*="css"] {
         cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="3" fill="%2300E5FF" /><circle cx="16" cy="16" r="8" fill="none" stroke="%2300E5FF" stroke-width="1.5" opacity="0.6"/><path d="M16 0 L16 6 M16 26 L16 32 M0 16 L6 16 M26 16 L32 16" stroke="%2300E5FF" stroke-width="1.5" stroke-linecap="round"/></svg>') 16 16, auto;
     }
+    /* 悬停交互：变成高亮的绿色光环 */
     a, button, [role="button"], .stSlider, label[data-baseweb="checkbox"] {
         cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="5" fill="%2300E676" /><circle cx="16" cy="16" r="12" fill="none" stroke="%2300E676" stroke-width="2" opacity="0.8"/></svg>') 16 16, pointer !important;
     }
@@ -208,16 +211,188 @@ PLOTLY_TEMPLATE = "plotly_dark"
 
 # 待机状态：如果还没有结果
 if st.session_state['sim_data'] is None:
-    # 居中显示一个帅气的待机提示
+    
+    # 注入专门用于待机页面的动画 CSS
+    standby_css = """
+    <style>
+        .v2g-hero {
+            text-align: center;
+            padding-top: 2vh;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hero-title {
+            font-size: 3.5rem;
+            font-weight: 900;
+            background: linear-gradient(90deg, #00E5FF, #00E676, #00E5FF);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shine 3s linear infinite;
+            margin-bottom: 10px;
+        }
+        @keyframes shine {
+            to { background-position: 200% center; }
+        }
+        
+        .hero-subtitle {
+            color: #A0AEC0;
+            font-size: 1.2rem;
+            letter-spacing: 4px;
+            margin-bottom: 40px;
+        }
+
+        .topo-container {
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            position: relative;
+            height: 300px;
+        }
+        
+        .energy-line {
+            stroke-dasharray: 10 15;
+            animation: flow 1s linear infinite;
+        }
+        @keyframes flow {
+            to { stroke-dashoffset: -25; }
+        }
+        
+        .glow-node {
+            animation: pulse 2s ease-in-out infinite alternate;
+        }
+        @keyframes pulse {
+            from { filter: drop-shadow(0 0 5px #00E5FF); }
+            to { filter: drop-shadow(0 0 20px #00E676); }
+        }
+        
+        .feature-card {
+            background: rgba(17, 24, 39, 0.6);
+            border: 1px solid rgba(0, 229, 255, 0.2);
+            border-radius: 12px;
+            padding: 25px 20px;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: #00E5FF;
+            box-shadow: 0 10px 30px rgba(0, 229, 255, 0.15);
+        }
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+        .feature-title {
+            color: #00E5FF;
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .feature-desc {
+            color: #8892B0;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+    </style>
+    """
+    st.markdown(standby_css, unsafe_allow_html=True)
+    
+    # 顶部文字
     st.markdown("""
-        <div style="text-align: center; margin-top: 12vh; color: #A0AEC0;">
-            <div style="font-size: 5rem; margin-bottom: 20px; opacity: 0.9; filter: drop-shadow(0 0 20px #00E5FF);">⚡</div>
-            <h2 style="color: #00E5FF; text-shadow: 0 0 15px rgba(0,229,255,0.5); letter-spacing: 4px;">SYSTEM STANDBY</h2>
-            <p style="font-size: 1.1rem; margin-top: 15px;">系统就绪，请在左侧配置参数后点击 <b>开始仿真计算</b>。</p>
+        <div class="v2g-hero">
+            <h1 class="hero-title">Vehicle-to-Grid</h1>
+            <div class="hero-subtitle">重塑微网能源生态 · 让每一度电都有价值</div>
         </div>
     """, unsafe_allow_html=True)
 
-# 有结果时的展示
+    # 动态 SVG 拓扑图 (电网 <-> 微网 <-> 电动汽车)
+    v2g_svg = """
+    <div class="topo-container">
+        <svg viewBox="0 0 800 300" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+            <!-- 连接线 -->
+            <line x1="150" y1="150" x2="400" y2="150" stroke="#00E5FF" stroke-width="3" class="energy-line" />
+            <line x1="400" y1="150" x2="650" y2="150" stroke="#00E676" stroke-width="3" class="energy-line" />
+            
+            <!-- 左侧：传统电网 -->
+            <g transform="translate(100, 150)" class="glow-node">
+                <circle cx="50" cy="0" r="40" fill="#0A0F1A" stroke="#00E5FF" stroke-width="3" />
+                <text x="50" y="10" fill="#00E5FF" font-size="30" text-anchor="middle" font-weight="bold">🏭</text>
+                <text x="50" y="65" fill="#A0AEC0" font-size="14" text-anchor="middle">大电网</text>
+            </g>
+
+            <!-- 中间：微网/聚合商 -->
+            <g transform="translate(350, 150)" class="glow-node">
+                <circle cx="50" cy="0" r="50" fill="#0A0F1A" stroke="#00E5FF" stroke-width="4" />
+                <text x="50" y="10" fill="#00E5FF" font-size="35" text-anchor="middle" font-weight="bold">⚡</text>
+                <text x="50" y="75" fill="#00E5FF" font-size="15" text-anchor="middle" font-weight="bold">V2G 平台</text>
+            </g>
+            
+            <!-- 右侧：电动汽车 -->
+            <g transform="translate(600, 150)" class="glow-node">
+                <circle cx="50" cy="0" r="40" fill="#0A0F1A" stroke="#00E676" stroke-width="3" />
+                <text x="50" y="10" fill="#00E676" font-size="30" text-anchor="middle" font-weight="bold">🚗</text>
+                <text x="50" y="65" fill="#A0AEC0" font-size="14" text-anchor="middle">EV 车队</text>
+            </g>
+            
+            <!-- 流动粒子的点缀 -->
+            <circle cx="200" cy="150" r="4" fill="#00E5FF" style="filter: drop-shadow(0 0 10px #00E5FF);">
+                <animate attributeName="cx" from="150" to="400" dur="2s" repeatCount="indefinite" />
+            </circle>
+            <circle cx="550" cy="150" r="4" fill="#00E676" style="filter: drop-shadow(0 0 10px #00E676);">
+                <animate attributeName="cx" from="650" to="400" dur="2.5s" repeatCount="indefinite" />
+            </circle>
+        </svg>
+    </div>
+    """
+    components.html(v2g_svg, height=320)
+
+    # 下方的特性介绍卡片
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("""
+            <div class="feature-card">
+                <div class="feature-icon">🔋</div>
+                <div class="feature-title">海量分布式储能</div>
+                <div class="feature-desc">
+                    将闲置的电动汽车电池转化为微网的巨型“充电宝”，在新能源大发时消纳绿电，在负荷高峰时反向放电。
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+    with col2:
+        st.markdown("""
+            <div class="feature-card">
+                <div class="feature-icon">📈</div>
+                <div class="feature-title">峰谷套利与降本</div>
+                <div class="feature-desc">
+                    通过智能调度算法（MILP），引导无序充电转向低谷充电，不仅削减微网峰值负荷，更为车主创造真实收益。
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+    with col3:
+        st.markdown("""
+            <div class="feature-card">
+                <div class="feature-icon">🛡️</div>
+                <div class="feature-title">鲁棒性工程增强</div>
+                <div class="feature-desc">
+                    融合 CVaR 风险度量、变压器容量限制与电池折旧模型，应对光伏、负荷及电价的三重不确定性。
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+    # 再次提示操作
+    st.markdown("""
+        <div style="text-align: center; margin-top: 50px; color: #A0AEC0; animation: pulse 2s infinite alternate;">
+            👈 <b>请在左侧控制面板配置参数，启动仿真引擎</b>
+        </div>
+    """, unsafe_allow_html=True)
+
+# ================= 有结果时的展示 =================
 else:
     res = st.session_state['sim_data']
     totals = res["totals"]
