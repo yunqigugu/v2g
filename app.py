@@ -12,7 +12,7 @@ from config import CONFIG
 from main import run_simulation
 
 # ================= 页面基础配置与极客科幻 CSS =================
-st.set_page_config(page_title="V2G 微网仿真控制台", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="V2G 微网仿真控制台", layout="wide", page_icon="⚡", initial_sidebar_state="expanded")
 
 custom_css = """
 <style>
@@ -24,45 +24,36 @@ custom_css = """
     /* 隐藏默认元素 */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    header {visibility: hidden;} /* 隐藏顶部横条 */
 
     /* 2. 覆盖所有原生组件的突兀白底/白边 */
-    /* 下拉框、多选框 */
     div[data-baseweb="select"] > div {
         background-color: rgba(17, 24, 39, 0.7) !important;
         border: 1px solid rgba(0, 229, 255, 0.3) !important;
         border-radius: 8px !important;
         color: #E2E8F0 !important;
     }
-    /* 选中标签的底色 */
     div[data-baseweb="tag"] {
         background-color: rgba(0, 229, 255, 0.2) !important;
         border: 1px solid #00E5FF !important;
         color: #00E5FF !important;
     }
     
-    /* 提示框 (st.info, st.success) */
+    /* 提示框 */
     div[data-testid="stAlert"] {
         background-color: rgba(17, 24, 39, 0.6) !important;
         border: 1px solid rgba(0, 229, 255, 0.4) !important;
-        border-radius: 10px !important;
+        border-radius: 8px !important;
         color: #E2E8F0 !important;
-        box-shadow: 0 0 15px rgba(0, 229, 255, 0.1) !important;
     }
-    div[data-testid="stAlert"] svg {
-        fill: #00E5FF !important;
-    }
-    
+
     /* 3. Tabs 标签页美化 */
     button[data-baseweb="tab"] {
         background-color: transparent !important;
         color: #A0AEC0 !important;
-        font-size: 1.05rem !important;
+        font-size: 1rem !important;
         font-weight: 600 !important;
         border-bottom: 2px solid transparent !important;
-        transition: all 0.3s ease;
-    }
-    button[data-baseweb="tab"]:hover {
-        color: #00E5FF !important;
     }
     button[aria-selected="true"] {
         color: #00E5FF !important;
@@ -71,11 +62,9 @@ custom_css = """
     }
 
     /* 4. 发光光标 */
-    /* 默认：发光的青色十字星准星 */
     html, body, [class*="css"] {
         cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="3" fill="%2300E5FF" /><circle cx="16" cy="16" r="8" fill="none" stroke="%2300E5FF" stroke-width="1.5" opacity="0.6"/><path d="M16 0 L16 6 M16 26 L16 32 M0 16 L6 16 M26 16 L32 16" stroke="%2300E5FF" stroke-width="1.5" stroke-linecap="round"/></svg>') 16 16, auto;
     }
-    /* 悬停交互：变成高亮的绿色光环 */
     a, button, [role="button"], .stSlider, label[data-baseweb="checkbox"] {
         cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="5" fill="%2300E676" /><circle cx="16" cy="16" r="12" fill="none" stroke="%2300E676" stroke-width="2" opacity="0.8"/></svg>') 16 16, pointer !important;
     }
@@ -87,40 +76,32 @@ custom_css = """
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         font-weight: 900;
-        margin-top: 10px;
-        margin-bottom: 30px;
-        font-size: 2.8rem;
-        letter-spacing: 2px;
+        margin-top: -10px;
+        margin-bottom: 10px;
+        font-size: 2.5rem;
     }
     
     .sidebar-header {
         color: #00E5FF;
         border-bottom: 2px solid rgba(0, 229, 255, 0.5);
-        padding-bottom: 8px;
-        margin-top: 15px;
-        margin-bottom: 20px;
-        text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
-        font-size: 1.2rem;
+        padding-bottom: 5px;
+        margin-top: 10px;
+        margin-bottom: 10px;
+        font-size: 1.1rem;
     }
     
     /* 6. 数据卡片 */
     [data-testid="stVerticalBlockBorderWrapper"] {
         background-color: rgba(17, 24, 39, 0.5) !important;
         border: 1px solid rgba(0, 229, 255, 0.2) !important;
-        border-radius: 12px !important;
+        border-radius: 10px !important;
         box-shadow: 0 0 20px rgba(0, 229, 255, 0.05) !important;
         backdrop-filter: blur(10px);
-        transition: all 0.3s;
-    }
-    [data-testid="stVerticalBlockBorderWrapper"]:hover {
-        border: 1px solid rgba(0, 229, 255, 0.6) !important;
-        box-shadow: 0 0 30px rgba(0, 229, 255, 0.15) !important;
     }
     
     /* 7. 指标卡数字 */
     [data-testid="stMetricValue"] {
         color: #00E5FF !important;
-        text-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
         font-weight: 700;
     }
     
@@ -129,15 +110,13 @@ custom_css = """
         background: rgba(0, 230, 118, 0.05) !important;
         color: #00E676 !important;
         border: 1px solid rgba(0, 230, 118, 0.5) !important;
-        border-radius: 8px;
+        border-radius: 6px;
         font-weight: bold;
         transition: all 0.3s ease;
-        box-shadow: 0 0 10px rgba(0, 230, 118, 0.1);
     }
     .stButton>button:hover {
-        transform: translateY(-2px);
         background: rgba(0, 230, 118, 0.15) !important;
-        box-shadow: 0 0 20px rgba(0, 230, 118, 0.6), inset 0 0 10px rgba(0, 230, 118, 0.2);
+        box-shadow: 0 0 15px rgba(0, 230, 118, 0.6);
         border-color: #00E676 !important;
     }
 </style>
@@ -160,19 +139,19 @@ with st.sidebar:
         index=3
     )
     
-    n_ev = st.slider("EV 数量 (辆)", min_value=10, max_value=1500, value=200, step=10)
-    n_days = st.slider("仿真天数 (天)", min_value=1, max_value=30, value=2, step=1)
-    sell_ratio = st.slider("售电比例 (0.1~1.0)", min_value=0.1, max_value=1.0, value=0.60, step=0.05)
-    emergency_ratio = st.slider("紧急购电惩罚倍数 (5λ)", min_value=1.0, max_value=10.0, value=5.0, step=0.5)
+    n_ev = st.slider("EV 数量 (辆)", 10, 1500, 200, 10)
+    n_days = st.slider("仿真天数 (天)", 1, 30, 2, 1)
+    sell_ratio = st.slider("售电比例", 0.1, 1.0, 0.60, 0.05)
+    emergency_ratio = st.slider("紧急购电惩罚倍数", 1.0, 10.0, 5.0, 0.5)
 
-    st.markdown("<h2 class='sidebar-header'>🧩 2. 附加模块叠加 (B/C)</h2>", unsafe_allow_html=True)
-    with st.expander("📦 B 组：不确定性叠加"):
+    st.markdown("<h2 class='sidebar-header'>🧩 2. 附加模块叠加</h2>", unsafe_allow_html=True)
+    with st.expander("B 组：不确定性叠加"):
         b1 = st.checkbox("B1: 光伏不确定性", value=CONFIG["B1_pv"])
         b2 = st.checkbox("B2: 负荷不确定性", value=CONFIG["B2_load"])
         b3 = st.checkbox("B3: 电价不确定性", value=CONFIG["B3_price"])
         b4 = st.checkbox("B4: EV行为不确定性", value=CONFIG["B4_ev"])
         
-    with st.expander("⚙️ C 组：工程增强"):
+    with st.expander("C 组：工程增强"):
         c1 = st.checkbox("C1: 滚动 MPC", value=CONFIG["C1_rolling"])
         c2 = st.checkbox("C2: CVaR 风险", value=CONFIG["C2_cvar"])
         c3 = st.checkbox("C3: 电池折旧", value=CONFIG["C3_degradation"])
@@ -196,7 +175,7 @@ if run_btn:
     cfg["mip_gap"] = 0.05
     cfg["solve_time_limit"] = 60
 
-    with st.spinner(f"🧠 正在求解 {n_days} 天、{n_ev} 辆车的 MILP 模型，请稍候..."):
+    with st.spinner(f"🧠 正在求解 {n_days} 天、{n_ev} 辆车的 MILP 模型..."):
         try:
             res = run_simulation(copy.deepcopy(cfg), export_files=False)
             st.session_state['sim_data'] = res
@@ -209,97 +188,50 @@ if run_btn:
 FUTURE_COLORS = ["#00E5FF", "#00E676", "#7C4DFF", "#FF9100"]
 PLOTLY_TEMPLATE = "plotly_dark"
 
-# 待机状态：如果还没有结果
+# 待机状态：紧凑版首页
 if st.session_state['sim_data'] is None:
     
-    # 注入专门用于待机页面的动画 CSS
     standby_css = """
     <style>
-        .v2g-hero {
-            text-align: center;
-            padding-top: 2vh;
-            position: relative;
-            overflow: hidden;
-        }
+        /* 极度压缩待机页的上下间距 */
+        .v2g-hero { text-align: center; padding-top: 0vh; margin-bottom: -10px; }
         
         .hero-title {
-            font-size: 3.5rem;
-            font-weight: 900;
+            font-size: 2.8rem; font-weight: 900;
             background: linear-gradient(90deg, #00E5FF, #00E676, #00E5FF);
-            background-size: 200% auto;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: shine 3s linear infinite;
-            margin-bottom: 10px;
+            background-size: 200% auto; -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent; animation: shine 3s linear infinite;
+            margin-bottom: 5px;
         }
-        @keyframes shine {
-            to { background-position: 200% center; }
-        }
+        @keyframes shine { to { background-position: 200% center; } }
         
-        .hero-subtitle {
-            color: #A0AEC0;
-            font-size: 1.2rem;
-            letter-spacing: 4px;
-            margin-bottom: 40px;
-        }
+        .hero-subtitle { color: #A0AEC0; font-size: 1rem; letter-spacing: 3px; margin-bottom: 10px; }
 
-        .topo-container {
-            width: 100%;
-            max-width: 800px;
-            margin: 0 auto;
-            position: relative;
-            height: 300px;
-        }
+        .topo-container { width: 100%; max-width: 700px; margin: 0 auto; height: 220px; }
         
-        .energy-line {
-            stroke-dasharray: 10 15;
-            animation: flow 1s linear infinite;
-        }
-        @keyframes flow {
-            to { stroke-dashoffset: -25; }
-        }
+        .energy-line { stroke-dasharray: 10 15; animation: flow 1s linear infinite; }
+        @keyframes flow { to { stroke-dashoffset: -25; } }
         
-        .glow-node {
-            animation: pulse 2s ease-in-out infinite alternate;
-        }
-        @keyframes pulse {
-            from { filter: drop-shadow(0 0 5px #00E5FF); }
-            to { filter: drop-shadow(0 0 20px #00E676); }
-        }
+        .glow-node { animation: pulse 2s ease-in-out infinite alternate; }
+        @keyframes pulse { from { filter: drop-shadow(0 0 5px #00E5FF); } to { filter: drop-shadow(0 0 20px #00E676); } }
         
         .feature-card {
-            background: rgba(17, 24, 39, 0.6);
-            border: 1px solid rgba(0, 229, 255, 0.2);
-            border-radius: 12px;
-            padding: 25px 20px;
-            margin-top: 20px;
-            transition: all 0.3s ease;
+            background: rgba(17, 24, 39, 0.6); border: 1px solid rgba(0, 229, 255, 0.2);
+            border-radius: 10px; padding: 15px 15px; /* 压缩卡片内边距 */
+            transition: all 0.3s ease; height: 100%; /* 保证卡片等高 */
         }
         .feature-card:hover {
-            transform: translateY(-5px);
-            border-color: #00E5FF;
-            box-shadow: 0 10px 30px rgba(0, 229, 255, 0.15);
+            transform: translateY(-3px); border-color: #00E5FF;
+            box-shadow: 0 10px 20px rgba(0, 229, 255, 0.15);
         }
-        .feature-icon {
-            font-size: 2.5rem;
-            margin-bottom: 15px;
-        }
-        .feature-title {
-            color: #00E5FF;
-            font-size: 1.2rem;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        .feature-desc {
-            color: #8892B0;
-            font-size: 0.95rem;
-            line-height: 1.6;
-        }
+        .feature-icon { font-size: 2rem; margin-bottom: 10px; }
+        .feature-title { color: #00E5FF; font-size: 1.1rem; font-weight: bold; margin-bottom: 5px; }
+        .feature-desc { color: #8892B0; font-size: 0.85rem; line-height: 1.5; }
     </style>
     """
     st.markdown(standby_css, unsafe_allow_html=True)
     
-    # 顶部文字
+    # 顶部文字（更紧凑）
     st.markdown("""
         <div class="v2g-hero">
             <h1 class="hero-title">Vehicle-to-Grid</h1>
@@ -307,49 +239,45 @@ if st.session_state['sim_data'] is None:
         </div>
     """, unsafe_allow_html=True)
 
-    # 动态 SVG 拓扑图 (电网 <-> 微网 <-> 电动汽车)
+    # 动态 SVG 拓扑图（缩减了高度）
     v2g_svg = """
     <div class="topo-container">
-        <svg viewBox="0 0 800 300" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-            <!-- 连接线 -->
-            <line x1="150" y1="150" x2="400" y2="150" stroke="#00E5FF" stroke-width="3" class="energy-line" />
-            <line x1="400" y1="150" x2="650" y2="150" stroke="#00E676" stroke-width="3" class="energy-line" />
+        <svg viewBox="0 0 800 250" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+            <line x1="150" y1="125" x2="400" y2="125" stroke="#00E5FF" stroke-width="3" class="energy-line" />
+            <line x1="400" y1="125" x2="650" y2="125" stroke="#00E676" stroke-width="3" class="energy-line" />
             
-            <!-- 左侧：传统电网 -->
-            <g transform="translate(100, 150)" class="glow-node">
-                <circle cx="50" cy="0" r="40" fill="#0A0F1A" stroke="#00E5FF" stroke-width="3" />
-                <text x="50" y="10" fill="#00E5FF" font-size="30" text-anchor="middle" font-weight="bold">🏭</text>
-                <text x="50" y="65" fill="#A0AEC0" font-size="14" text-anchor="middle">大电网</text>
+            <g transform="translate(100, 125)" class="glow-node">
+                <circle cx="50" cy="0" r="35" fill="#0A0F1A" stroke="#00E5FF" stroke-width="3" />
+                <text x="50" y="10" fill="#00E5FF" font-size="26" text-anchor="middle" font-weight="bold">🏭</text>
+                <text x="50" y="55" fill="#A0AEC0" font-size="13" text-anchor="middle">大电网</text>
             </g>
 
-            <!-- 中间：微网/聚合商 -->
-            <g transform="translate(350, 150)" class="glow-node">
-                <circle cx="50" cy="0" r="50" fill="#0A0F1A" stroke="#00E5FF" stroke-width="4" />
-                <text x="50" y="10" fill="#00E5FF" font-size="35" text-anchor="middle" font-weight="bold">⚡</text>
-                <text x="50" y="75" fill="#00E5FF" font-size="15" text-anchor="middle" font-weight="bold">V2G 平台</text>
+            <g transform="translate(350, 125)" class="glow-node">
+                <circle cx="50" cy="0" r="45" fill="#0A0F1A" stroke="#00E5FF" stroke-width="4" />
+                <text x="50" y="10" fill="#00E5FF" font-size="30" text-anchor="middle" font-weight="bold">⚡</text>
+                <text x="50" y="65" fill="#00E5FF" font-size="14" text-anchor="middle" font-weight="bold">V2G 平台</text>
             </g>
             
-            <!-- 右侧：电动汽车 -->
-            <g transform="translate(600, 150)" class="glow-node">
-                <circle cx="50" cy="0" r="40" fill="#0A0F1A" stroke="#00E676" stroke-width="3" />
-                <text x="50" y="10" fill="#00E676" font-size="30" text-anchor="middle" font-weight="bold">🚗</text>
-                <text x="50" y="65" fill="#A0AEC0" font-size="14" text-anchor="middle">EV 车队</text>
+            <g transform="translate(600, 125)" class="glow-node">
+                <circle cx="50" cy="0" r="35" fill="#0A0F1A" stroke="#00E676" stroke-width="3" />
+                <text x="50" y="10" fill="#00E676" font-size="26" text-anchor="middle" font-weight="bold">🚗</text>
+                <text x="50" y="55" fill="#A0AEC0" font-size="13" text-anchor="middle">EV 车队</text>
             </g>
             
-            <!-- 流动粒子的点缀 -->
-            <circle cx="200" cy="150" r="4" fill="#00E5FF" style="filter: drop-shadow(0 0 10px #00E5FF);">
+            <circle cx="200" cy="125" r="4" fill="#00E5FF" style="filter: drop-shadow(0 0 10px #00E5FF);">
                 <animate attributeName="cx" from="150" to="400" dur="2s" repeatCount="indefinite" />
             </circle>
-            <circle cx="550" cy="150" r="4" fill="#00E676" style="filter: drop-shadow(0 0 10px #00E676);">
+            <circle cx="550" cy="125" r="4" fill="#00E676" style="filter: drop-shadow(0 0 10px #00E676);">
                 <animate attributeName="cx" from="650" to="400" dur="2.5s" repeatCount="indefinite" />
             </circle>
         </svg>
     </div>
     """
-    components.html(v2g_svg, height=320)
+    # 压缩组件的渲染高度
+    components.html(v2g_svg, height=230)
 
-    # 下方的特性介绍卡片
-    st.markdown("<br><br>", unsafe_allow_html=True)
+    # 下方的特性介绍卡片（去掉了多余的换行符，通过 st.columns 直接紧凑排列）
+    st.markdown("<div style='margin-top: -10px;'></div>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -385,14 +313,14 @@ if st.session_state['sim_data'] is None:
             </div>
         """, unsafe_allow_html=True)
         
-    # 再次提示操作
+    # 提示操作（极度上提）
     st.markdown("""
-        <div style="text-align: center; margin-top: 50px; color: #A0AEC0; animation: pulse 2s infinite alternate;">
+        <div style="text-align: center; margin-top: 15px; color: #A0AEC0; font-size: 0.9rem; animation: pulse 2s infinite alternate;">
             👈 <b>请在左侧控制面板配置参数，启动仿真引擎</b>
         </div>
     """, unsafe_allow_html=True)
 
-# ================= 有结果时的展示 =================
+# ================= 有结果时的展示（保持原汁原味） =================
 else:
     res = st.session_state['sim_data']
     totals = res["totals"]
