@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots  # ★ 引入子图模块
 import io
 import traceback
 
@@ -119,7 +120,7 @@ with st.sidebar:
         index=3
     )
     n_ev = st.slider("EV 数量 (辆)", 10, 1500, 200, 10)
-    n_days = st.slider("仿真天数 (天)", 1, 30, 2, 1)
+    n_days = st.slider("仿真天数 (天)", 1, 30, 5, 1) # 默认给5天，方便看趋势
     sell_ratio = st.slider("售电比例", 0.1, 1.0, 0.60, 0.05)
     emergency_ratio = st.slider("紧急购电惩罚倍数", 1.0, 10.0, 5.0, 0.5)
 
@@ -227,12 +228,12 @@ else:
         col4.metric("A4 纯 V2G", f"{totals['A4']:.0f} 元", delta=f"{totals['A4']-totals['A3']:.0f} 元")
         st.info(f"**💡 增量分析：** A2-A3 智能充电降本: `{res['delta'][1]:+.0f}` 元 | **A3-A4 纯 V2G 收益: `{res['delta'][2]:+.0f}` 元**")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["📈 微观对比", "📉 日度成本", "💰 收益分配", "💾 数据下载"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📈 微观与宏观趋势", "📉 日度成本", "💰 收益分配", "💾 数据下载"])
 
     # ---------- Tab 1: 交互式对比 ----------
     with tab1:
         with st.container(border=True):
-            day_options = ["🌐 全局趋势视图 (按天汇总)"] + list(res["df_timeseries"]["Day"].unique())
+            day_options = ["🌐 全局趋势视图 (多子图对比)"] + list(res["df_timeseries"]["Day"].unique())
             c1, c2, c3 = st.columns([1.5, 2, 3.5])
             with c1:
                 t_day = st.selectbox("查看时间范围", options=day_options, index=1)
@@ -249,54 +250,57 @@ else:
                                         default=["Load", "EV_Charge", "EV_Discharge"],
                                         format_func=lambda x: y_options[x])
             
-            if t_day == "🌐 全局趋势视图 (按天汇总)":
-                # ★ 全新逻辑：按天累加电量，呈现整体宏观趋势
-                df_grouped = res["df_timeseries"].groupby(["Day", "Scenario"])[y_cols].sum().reset_index()
-                # 功率(kW) * 0.5h = 电量(kWh)
-                for col in y_cols:
-                    df_grouped[col] = df_grouped[col] * 0.5
-                
-                df_price_agg = res["df_timeseries"].groupby("Day")["Price"].mean().reset_index()
-                df_grouped = df_grouped[df_grouped["Scenario"].isin(t_scens)]
-                
-                if not df_grouped.empty and y_cols:
-                    df_melt = df_grouped.melt(id_vars=["Day", "Scenario"], value_vars=y_cols, var_name="指标", value_name="电量")
-                    df_melt["指标"] = df_melt["指标"].map(lambda x: y_options[x] + "总量 (kWh)")
+            # ================= ★ 全局趋势：多子图方案 =================
+            if t_day == "🌐 全局趋势视图 (多子图对比)":
+                if not y_cols:
+                    st.warning("请至少选择一个叠加指标。")
+                else:
+                    # 聚合逻辑：按天求均值（kW），展现日平均功率趋势
+                    df_grouped = res["df_timeseries"].groupby(["Day", "Scenario"])[y_cols].mean().reset_index()
+                    df_grouped = df_grouped[df_grouped["Scenario"].isin(t_scens)]
                     
-                    fig = go.Figure()
-                    for i, (metric, group) in enumerate(df_melt.groupby("指标")):
-                        for scen in t_scens:
-                            scen_data = group[group["Scenario"] == scen]
-                            if scen_data.empty: continue
+                    # 动态创建子图（每个指标占一行，共用X轴）
+                    fig = make_subplots(
+                        rows=len(y_cols), cols=1, 
+                        shared_xaxes=True, 
+                        vertical_spacing=0.08,
+                        subplot_titles=[f"{y_options[c]} 变化趋势 (日均值)" for c in y_cols]
+                    )
+                    
+                    for i, col in enumerate(y_cols):
+                        for j, scen in enumerate(t_scens):
+                            df_scen = df_grouped[df_grouped["Scenario"] == scen]
+                            if df_scen.empty: continue
+                            
                             fig.add_trace(go.Scatter(
-                                x=scen_data["Day"], y=scen_data["电量"],
-                                name=f"{scen} - {metric}", mode="lines+markers",
-                                line=dict(color=FUTURE_COLORS[i % len(FUTURE_COLORS)], dash='solid' if scen == "A4" else 'dot', width=2),
-                                marker=dict(size=6)
-                            ))
-                    
-                    fig.add_trace(go.Scatter(
-                        x=df_price_agg["Day"], y=df_price_agg["Price"], name="日均电价 (元/kWh)",
-                        mode="lines+markers", line=dict(color="#B0BEC5", width=2, dash="dash"), yaxis="y2",
-                        marker=dict(size=6, symbol="diamond")
-                    ))
+                                x=df_scen["Day"], y=df_scen[col],
+                                name=scen, 
+                                mode="lines+markers",
+                                line=dict(color=FUTURE_COLORS[j % len(FUTURE_COLORS)], width=2),
+                                marker=dict(size=6),
+                                showlegend=(i == 0) # 只在第一个子图显示图例，防止重复
+                            ), row=i+1, col=1)
                     
                     days = df_grouped["Day"].unique()
-                    dtick = max(1, len(days)//12) # 根据天数动态调整X轴刻度密度
+                    dtick_val = max(1, len(days)//10)
                     
                     fig.update_layout(
-                        title="整体趋势概览 (每日累计电量)",
-                        template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                        xaxis=dict(title="天数 (Day)", gridcolor="rgba(255,255,255,0.05)", dtick=dtick),
-                        yaxis=dict(title="日累计电量 (kWh)", gridcolor="rgba(255,255,255,0.05)"),
-                        yaxis2=dict(title="日均电价 (元/kWh)", overlaying="y", side="right", showgrid=False),
+                        height=250 * len(y_cols), # 高度随指标数量动态增加
+                        template=PLOTLY_TEMPLATE, 
+                        paper_bgcolor="rgba(0,0,0,0)", 
+                        plot_bgcolor="rgba(0,0,0,0)",
                         hovermode="x unified",
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                        margin=dict(l=20, r=20, t=50, b=20)
+                        margin=dict(l=20, r=20, t=40, b=20)
                     )
+                    # 统一设置所有子图的轴和网格
+                    fig.update_xaxes(title_text="天数 (Day)", gridcolor="rgba(255,255,255,0.05)", dtick=dtick_val)
+                    fig.update_yaxes(title_text="平均功率 (kW)", gridcolor="rgba(255,255,255,0.05)")
+                    
                     st.plotly_chart(fig, use_container_width=True)
+            
+            # ================= ★ 单日细节：经典时序图 =================
             else:
-                # 单日逻辑：还原最纯粹的 48 时段曲线
                 df_day = res["df_timeseries"][res["df_timeseries"]["Day"] == t_day].copy()
                 df_day = df_day[df_day["Scenario"].isin(t_scens)]
                 
