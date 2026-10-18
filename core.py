@@ -115,31 +115,32 @@ def _build_milp(price, load, pv, fleet, cfg, mode, e_bess_init=None, e_ev_init=N
 
     m = pulp.LpProblem(f"v2g_{mode}", pulp.LpMinimize)
 
-    pg   = [pulp.LpVariable(f"pg_{t}",  0) for t in range(n)]
-    pg_emerg = [pulp.LpVariable(f"pg_emerg_{t}", 0) for t in range(n)]
-    pc_b = [pulp.LpVariable(f"pcb_{t}", 0, pc_max) for t in range(n)]
-    pd_b = [pulp.LpVariable(f"pdb_{t}", 0, pd_max) for t in range(n)]
-    pu   = [pulp.LpVariable(f"pu_{t}",  0) for t in range(n)]
-    eb_b = [pulp.LpVariable(f"ebb_{t}", E_min, E_max) for t in range(n + 1)]
-    zc_b = [pulp.LpVariable(f"zcb_{t}", cat="Binary") for t in range(n)]
-    zd_b = [pulp.LpVariable(f"zdb_{t}", cat="Binary") for t in range(n)]
+    # ★ 全部强制使用关键字参数 (lowBound, upBound, cat) 完美兼容新版 PuLP
+    pg   = [pulp.LpVariable(name=f"pg_{t}",  lowBound=0) for t in range(n)]
+    pg_emerg = [pulp.LpVariable(name=f"pg_emerg_{t}", lowBound=0) for t in range(n)]
+    pc_b = [pulp.LpVariable(name=f"pcb_{t}", lowBound=0, upBound=pc_max) for t in range(n)]
+    pd_b = [pulp.LpVariable(name=f"pdb_{t}", lowBound=0, upBound=pd_max) for t in range(n)]
+    pu   = [pulp.LpVariable(name=f"pu_{t}",  lowBound=0) for t in range(n)]
+    eb_b = [pulp.LpVariable(name=f"ebb_{t}", lowBound=E_min, upBound=E_max) for t in range(n + 1)]
+    zc_b = [pulp.LpVariable(name=f"zcb_{t}", cat="Binary") for t in range(n)]
+    zd_b = [pulp.LpVariable(name=f"zdb_{t}", cat="Binary") for t in range(n)]
 
     ps = z_buy = z_sell = None
     if use_sell:
-        ps     = [pulp.LpVariable(f"ps_{t}",  0) for t in range(n)]
-        z_buy  = [pulp.LpVariable(f"zb_{t}",  cat="Binary") for t in range(n)]
-        z_sell = [pulp.LpVariable(f"zs_{t}",  cat="Binary") for t in range(n)]
+        ps     = [pulp.LpVariable(name=f"ps_{t}",  lowBound=0) for t in range(n)]
+        z_buy  = [pulp.LpVariable(name=f"zb_{t}",  cat="Binary") for t in range(n)]
+        z_sell = [pulp.LpVariable(name=f"zs_{t}",  cat="Binary") for t in range(n)]
 
     pce = ebe = zce = pde = zde = None
     ev_slack = []
     if use_ev_var and n_ev > 0:
-        pce = [[pulp.LpVariable(f"pce_{i}_{t}", 0, fleet["p_chg_max"][i]) for t in range(n)] for i in range(n_ev)]
-        ebe = [[pulp.LpVariable(f"ebe_{i}_{t}", cfg["ev_soc_min"] * fleet["e_cap"][i], cfg["ev_soc_max"] * fleet["e_cap"][i]) for t in range(n + 1)] for i in range(n_ev)]
-        zce = [[pulp.LpVariable(f"zce_{i}_{t}", cat="Binary") for t in range(n)] for i in range(n_ev)]
+        pce = [[pulp.LpVariable(name=f"pce_{i}_{t}", lowBound=0, upBound=fleet["p_chg_max"][i]) for t in range(n)] for i in range(n_ev)]
+        ebe = [[pulp.LpVariable(name=f"ebe_{i}_{t}", lowBound=cfg["ev_soc_min"] * fleet["e_cap"][i], upBound=cfg["ev_soc_max"] * fleet["e_cap"][i]) for t in range(n + 1)] for i in range(n_ev)]
+        zce = [[pulp.LpVariable(name=f"zce_{i}_{t}", cat="Binary") for t in range(n)] for i in range(n_ev)]
         if use_ev_dis:
-            pde = [[pulp.LpVariable(f"pde_{i}_{t}", 0, fleet["p_dis_max"][i]) for t in range(n)] for i in range(n_ev)]
-            zde = [[pulp.LpVariable(f"zde_{i}_{t}", cat="Binary") for t in range(n)] for i in range(n_ev)]
-        ev_slack = [pulp.LpVariable(f"slack_{i}", 0) for i in range(n_ev)]
+            pde = [[pulp.LpVariable(name=f"pde_{i}_{t}", lowBound=0, upBound=fleet["p_dis_max"][i]) for t in range(n)] for i in range(n_ev)]
+            zde = [[pulp.LpVariable(name=f"zde_{i}_{t}", cat="Binary") for t in range(n)] for i in range(n_ev)]
+        ev_slack = [pulp.LpVariable(name=f"slack_{i}", lowBound=0) for i in range(n_ev)]
 
     ev_unord = unordered_charge_profile(fleet, dt) if mode == "A2" and fleet else None
 
@@ -372,7 +373,7 @@ def prebuild_ev_pool(cfg, master_n=1500):
     _GLOBAL_EV_POOL.clear()
     for d in range(cfg["n_days"]):
         _GLOBAL_EV_POOL[d] = _gen_ev_fleet_master(d, cfg, master_n)
-    # ★ 删除了此处的 print 语句！
+    # 删除了此处的 print 语句
 
 def get_ev_fleet_slice(day_idx, n_use):
     pool = _GLOBAL_EV_POOL[day_idx]
