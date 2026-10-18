@@ -15,34 +15,113 @@ st.set_page_config(page_title="V2G 微网仿真控制台", layout="wide", page_i
 
 custom_css = """
 <style>
-    /* 1. 隐藏默认元素 */
+    /* 1. 全局背景：深空极光渐变 */
+    [data-testid="stAppViewContainer"] {
+        background: radial-gradient(circle at 50% -20%, #112240 0%, #0A0F1A 60%);
+    }
+    
+    /* 隐藏默认元素 */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+
+    /* 2. 覆盖所有原生组件的突兀白底/白边 */
+    /* 下拉框、多选框 */
+    div[data-baseweb="select"] > div {
+        background-color: rgba(17, 24, 39, 0.7) !important;
+        border: 1px solid rgba(0, 229, 255, 0.3) !important;
+        border-radius: 8px !important;
+        color: #E2E8F0 !important;
+    }
+    /* 选中标签的底色 */
+    div[data-baseweb="tag"] {
+        background-color: rgba(0, 229, 255, 0.2) !important;
+        border: 1px solid #00E5FF !important;
+        color: #00E5FF !important;
+    }
     
-    /* 2. ★ 科幻发光光标 (Cyberpunk Cursor) */
-    /* 默认状态：发光的青色十字星准星 */
+    /* 提示框 (st.info, st.success) */
+    div[data-testid="stAlert"] {
+        background-color: rgba(17, 24, 39, 0.6) !important;
+        border: 1px solid rgba(0, 229, 255, 0.4) !important;
+        border-radius: 10px !important;
+        color: #E2E8F0 !important;
+        box-shadow: 0 0 15px rgba(0, 229, 255, 0.1) !important;
+    }
+    div[data-testid="stAlert"] svg {
+        fill: #00E5FF !important;
+    }
+    
+    /* 3. Tabs 标签页美化 */
+    button[data-baseweb="tab"] {
+        background-color: transparent !important;
+        color: #A0AEC0 !important;
+        font-size: 1.05rem !important;
+        font-weight: 600 !important;
+        border-bottom: 2px solid transparent !important;
+        transition: all 0.3s ease;
+    }
+    button[data-baseweb="tab"]:hover {
+        color: #00E5FF !important;
+    }
+    button[aria-selected="true"] {
+        color: #00E5FF !important;
+        border-bottom: 2px solid #00E5FF !important;
+        text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+    }
+
+    /* 4. 发光光标 */
     html, body, [class*="css"] {
         cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="3" fill="%2300E5FF" /><circle cx="16" cy="16" r="8" fill="none" stroke="%2300E5FF" stroke-width="1.5" opacity="0.6"/><path d="M16 0 L16 6 M16 26 L16 32 M0 16 L6 16 M26 16 L32 16" stroke="%2300E5FF" stroke-width="1.5" stroke-linecap="round"/></svg>') 16 16, auto;
     }
-    /* 悬停在按钮/滑块上时：变成高亮的绿色光球 */
     a, button, [role="button"], .stSlider, label[data-baseweb="checkbox"] {
         cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="5" fill="%2300E676" /><circle cx="16" cy="16" r="12" fill="none" stroke="%2300E676" stroke-width="2" opacity="0.8"/></svg>') 16 16, pointer !important;
     }
     
-    /* 3. 主标题：青色到绿色的渐变霓虹发光 */
+    /* 5. 主标题与侧边栏 */
     .main-title {
         text-align: center;
         background: -webkit-linear-gradient(45deg, #00E5FF, #00E676);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         font-weight: 900;
+        margin-top: 10px;
         margin-bottom: 30px;
-        font-size: 3rem;
-        text-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
+        font-size: 2.8rem;
         letter-spacing: 2px;
     }
     
-    /* 4. 按钮：科技感倒角与悬停辉光 */
+    .sidebar-header {
+        color: #00E5FF;
+        border-bottom: 2px solid rgba(0, 229, 255, 0.5);
+        padding-bottom: 8px;
+        margin-top: 15px;
+        margin-bottom: 20px;
+        text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+        font-size: 1.2rem;
+    }
+    
+    /* 6. 数据卡片 */
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: rgba(17, 24, 39, 0.5) !important;
+        border: 1px solid rgba(0, 229, 255, 0.2) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 0 20px rgba(0, 229, 255, 0.05) !important;
+        backdrop-filter: blur(10px);
+        transition: all 0.3s;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:hover {
+        border: 1px solid rgba(0, 229, 255, 0.6) !important;
+        box-shadow: 0 0 30px rgba(0, 229, 255, 0.15) !important;
+    }
+    
+    /* 7. 指标卡数字 */
+    [data-testid="stMetricValue"] {
+        color: #00E5FF !important;
+        text-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
+        font-weight: 700;
+    }
+    
+    /* 8. 按钮发光 */
     .stButton>button {
         background: rgba(0, 230, 118, 0.05) !important;
         color: #00E676 !important;
@@ -57,33 +136,6 @@ custom_css = """
         background: rgba(0, 230, 118, 0.15) !important;
         box-shadow: 0 0 20px rgba(0, 230, 118, 0.6), inset 0 0 10px rgba(0, 230, 118, 0.2);
         border-color: #00E676 !important;
-    }
-    
-    /* 5. 数据卡片：深蓝毛玻璃 + 边框呼吸发光 */
-    [data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: rgba(17, 24, 39, 0.6) !important;
-        border: 1px solid rgba(0, 229, 255, 0.2) !important;
-        border-radius: 12px !important;
-        box-shadow: 0 0 20px rgba(0, 229, 255, 0.05) !important;
-        backdrop-filter: blur(8px);
-        transition: all 0.3s;
-    }
-    [data-testid="stVerticalBlockBorderWrapper"]:hover {
-        border: 1px solid rgba(0, 229, 255, 0.5) !important;
-        box-shadow: 0 0 25px rgba(0, 229, 255, 0.15) !important;
-    }
-    
-    /* 6. 侧边栏与指标数字 */
-    .sidebar-header {
-        color: #00E5FF;
-        border-bottom: 2px solid rgba(0, 229, 255, 0.5);
-        padding-bottom: 5px;
-        margin-bottom: 15px;
-        text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
-    }
-    [data-testid="stMetricValue"] {
-        color: #00E5FF !important;
-        text-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
     }
 </style>
 """
@@ -141,7 +193,7 @@ if run_btn:
     cfg["mip_gap"] = 0.05
     cfg["solve_time_limit"] = 60
 
-    with st.spinner(f"🧠 正在求解 {n_days} 天、{n_ev} 辆车的 MILP 模型..."):
+    with st.spinner(f"🧠 正在求解 {n_days} 天、{n_ev} 辆车的 MILP 模型，请稍候..."):
         try:
             res = run_simulation(copy.deepcopy(cfg), export_files=False)
             st.session_state['sim_data'] = res
@@ -151,11 +203,22 @@ if run_btn:
             st.code(traceback.format_exc()) 
 
 # ================= 结果展示区 =================
-# 颜色定义：科幻蓝、节能绿、暗紫、深橙
 FUTURE_COLORS = ["#00E5FF", "#00E676", "#7C4DFF", "#FF9100"]
 PLOTLY_TEMPLATE = "plotly_dark"
 
-if st.session_state['sim_data'] is not None:
+# 待机状态：如果还没有结果
+if st.session_state['sim_data'] is None:
+    # 居中显示一个帅气的待机提示
+    st.markdown("""
+        <div style="text-align: center; margin-top: 12vh; color: #A0AEC0;">
+            <div style="font-size: 5rem; margin-bottom: 20px; opacity: 0.9; filter: drop-shadow(0 0 20px #00E5FF);">⚡</div>
+            <h2 style="color: #00E5FF; text-shadow: 0 0 15px rgba(0,229,255,0.5); letter-spacing: 4px;">SYSTEM STANDBY</h2>
+            <p style="font-size: 1.1rem; margin-top: 15px;">系统就绪，请在左侧配置参数后点击 <b>开始仿真计算</b>。</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+# 有结果时的展示
+else:
     res = st.session_state['sim_data']
     totals = res["totals"]
     
@@ -225,7 +288,7 @@ if st.session_state['sim_data'] is not None:
                     paper_bgcolor="rgba(0,0,0,0)", 
                     plot_bgcolor="rgba(0,0,0,0)",
                     xaxis_title="时间 (小时)",
-                    yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.1)"),
+                    yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.05)"),
                     yaxis2=dict(title="电价 (元/kWh)", overlaying="y", side="right", showgrid=False),
                     hovermode="x unified",
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -257,8 +320,8 @@ if st.session_state['sim_data'] is not None:
                 margin=dict(t=50, b=20, l=20, r=20),
                 xaxis_title="天数",
                 yaxis_title="日总成本 (元)",
-                xaxis=dict(gridcolor="rgba(255,255,255,0.1)"),
-                yaxis=dict(gridcolor="rgba(255,255,255,0.1)")
+                xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
+                yaxis=dict(gridcolor="rgba(255,255,255,0.05)")
             )
             st.plotly_chart(fig_daily, use_container_width=True)
 
