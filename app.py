@@ -15,63 +15,75 @@ st.set_page_config(page_title="V2G 微网仿真控制台", layout="wide", page_i
 
 custom_css = """
 <style>
-    /* 1. 隐藏右上角主菜单和底部水印 */
+    /* 1. 隐藏默认元素 */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* 2. ★ 科幻十字准星光标 (替换默认鼠标) */
+    /* 2. ★ 科幻发光光标 (Cyberpunk Cursor) */
+    /* 默认状态：发光的青色十字星准星 */
     html, body, [class*="css"] {
-        cursor: crosshair;
+        cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="3" fill="%2300E5FF" /><circle cx="16" cy="16" r="8" fill="none" stroke="%2300E5FF" stroke-width="1.5" opacity="0.6"/><path d="M16 0 L16 6 M16 26 L16 32 M0 16 L6 16 M26 16 L32 16" stroke="%2300E5FF" stroke-width="1.5" stroke-linecap="round"/></svg>') 16 16, auto;
+    }
+    /* 悬停在按钮/滑块上时：变成高亮的绿色光球 */
+    a, button, [role="button"], .stSlider, label[data-baseweb="checkbox"] {
+        cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="5" fill="%2300E676" /><circle cx="16" cy="16" r="12" fill="none" stroke="%2300E676" stroke-width="2" opacity="0.8"/></svg>') 16 16, pointer !important;
     }
     
-    /* 3. 主标题：青色霓虹发光效果 */
+    /* 3. 主标题：青色到绿色的渐变霓虹发光 */
     .main-title {
         text-align: center;
-        color: #00E5FF;
-        font-weight: 800;
+        background: -webkit-linear-gradient(45deg, #00E5FF, #00E676);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 900;
         margin-bottom: 30px;
-        text-shadow: 0 0 10px rgba(0, 229, 255, 0.6), 0 0 20px rgba(0, 229, 255, 0.3);
+        font-size: 3rem;
+        text-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
         letter-spacing: 2px;
     }
     
-    /* 4. 按钮：节能绿发光 + 悬停动效 */
+    /* 4. 按钮：科技感倒角与悬停辉光 */
     .stButton>button {
-        background: transparent;
+        background: rgba(0, 230, 118, 0.05) !important;
         color: #00E676 !important;
-        border: 2px solid #00E676;
+        border: 1px solid rgba(0, 230, 118, 0.5) !important;
         border-radius: 8px;
         font-weight: bold;
         transition: all 0.3s ease;
-        box-shadow: 0 0 5px rgba(0, 230, 118, 0.2);
+        box-shadow: 0 0 10px rgba(0, 230, 118, 0.1);
     }
     .stButton>button:hover {
         transform: translateY(-2px);
-        background: rgba(0, 230, 118, 0.1);
-        box-shadow: 0 0 15px rgba(0, 230, 118, 0.8), inset 0 0 10px rgba(0, 230, 118, 0.4);
-        border-color: #00E676;
+        background: rgba(0, 230, 118, 0.15) !important;
+        box-shadow: 0 0 20px rgba(0, 230, 118, 0.6), inset 0 0 10px rgba(0, 230, 118, 0.2);
+        border-color: #00E676 !important;
     }
     
-    /* 5. 数据卡片：深蓝底色 + 青色科幻边框 */
+    /* 5. 数据卡片：深蓝毛玻璃 + 边框呼吸发光 */
     [data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: rgba(17, 24, 39, 0.7) !important;
-        border: 1px solid rgba(0, 229, 255, 0.3) !important;
+        background-color: rgba(17, 24, 39, 0.6) !important;
+        border: 1px solid rgba(0, 229, 255, 0.2) !important;
         border-radius: 12px !important;
-        box-shadow: 0 0 15px rgba(0, 229, 255, 0.05) !important;
-        backdrop-filter: blur(5px);
+        box-shadow: 0 0 20px rgba(0, 229, 255, 0.05) !important;
+        backdrop-filter: blur(8px);
+        transition: all 0.3s;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:hover {
+        border: 1px solid rgba(0, 229, 255, 0.5) !important;
+        box-shadow: 0 0 25px rgba(0, 229, 255, 0.15) !important;
     }
     
-    /* 6. 侧边栏头部：青色下划线 */
+    /* 6. 侧边栏与指标数字 */
     .sidebar-header {
         color: #00E5FF;
         border-bottom: 2px solid rgba(0, 229, 255, 0.5);
         padding-bottom: 5px;
         margin-bottom: 15px;
-        text-shadow: 0 0 5px rgba(0, 229, 255, 0.3);
+        text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
     }
-
-    /* 7. 指标卡数字颜色 */
     [data-testid="stMetricValue"] {
         color: #00E5FF !important;
+        text-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
     }
 </style>
 """
@@ -152,7 +164,6 @@ if st.session_state['sim_data'] is not None:
         st.markdown("### 📊 核心指标看板 (总成本对比)")
         col1, col2, col3, col4 = st.columns(4)
         
-        # 去掉了刺眼的红色，全部用白色/青色展示
         col1.metric("A1 纯 BESS", f"{totals['A1']:.0f} 元")
         col2.metric("A2 无序充电", f"{totals['A2']:.0f} 元")
         col3.metric("A3 智能充电", f"{totals['A3']:.0f} 元", delta=f"{totals['A3']-totals['A2']:.0f} 元")
@@ -199,7 +210,6 @@ if st.session_state['sim_data'] is not None:
                         fig.add_trace(go.Scatter(
                             x=scen_data["Hour"], y=scen_data["功率"],
                             name=f"{scen} - {metric}", mode="lines",
-                            # 使用科幻色系
                             line=dict(color=FUTURE_COLORS[i % len(FUTURE_COLORS)], dash='solid' if scen == "A4" else 'dot', width=2)
                         ))
                 
@@ -211,8 +221,8 @@ if st.session_state['sim_data'] is not None:
                 
                 fig.update_layout(
                     title=f"Day {t_day} 功率与电价时序对比",
-                    template=PLOTLY_TEMPLATE, # 深色图表
-                    paper_bgcolor="rgba(0,0,0,0)", # 图表背景透明
+                    template=PLOTLY_TEMPLATE, 
+                    paper_bgcolor="rgba(0,0,0,0)", 
                     plot_bgcolor="rgba(0,0,0,0)",
                     xaxis_title="时间 (小时)",
                     yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.1)"),
@@ -238,7 +248,7 @@ if st.session_state['sim_data'] is not None:
             fig_daily = px.line(
                 df_melt, x="Day", y="成本 (元)", color="场景", 
                 markers=True, title="各场景日度运行成本对比",
-                color_discrete_sequence=FUTURE_COLORS # 使用科幻色系
+                color_discrete_sequence=FUTURE_COLORS
             )
             fig_daily.update_layout(
                 template=PLOTLY_TEMPLATE, 
@@ -265,7 +275,7 @@ if st.session_state['sim_data'] is not None:
                 values='金额(元)', 
                 names='角色', 
                 title=f"V2G 总收益分红 (总计 {res['total_gain']:.0f} 元)",
-                color_discrete_sequence=FUTURE_COLORS, # 统一使用科幻色系
+                color_discrete_sequence=FUTURE_COLORS,
                 hole=0.5
             )
             fig_pie.update_traces(
@@ -273,7 +283,7 @@ if st.session_state['sim_data'] is not None:
                 texttemplate='<b>%{label}</b><br>%{value:,.0f} 元<br>(%{percent})',
                 hovertemplate='<b>%{label}</b><br>金额: %{value:,.2f} 元<br>占比: %{percent}<extra></extra>',
                 textfont_size=14,
-                marker=dict(line=dict(color='#0A0F1A', width=2)) # 饼图块之间的深色边框，增加立体感
+                marker=dict(line=dict(color='#0A0F1A', width=2))
             )
             fig_pie.update_layout(
                 template=PLOTLY_TEMPLATE,
