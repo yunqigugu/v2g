@@ -205,13 +205,23 @@ if st.session_state['sim_data'] is not None:
     with tab2:
         with st.container(border=True):
             st.markdown("#### 日度成本趋势对比")
-            fig_mat = plot_daily_cost(res["daily_df"], out_dir=None)
-            # Matplotlib 图表居中显示
-            col1, col2, col3 = st.columns([1, 8, 1])
-            with col2:
-                st.pyplot(fig_mat, use_container_width=True)
+            
+            # 使用 Plotly 画日度成本折线图
+            # 假设你的 daily_df 里面包含 Day 和 A1, A2, A3, A4 几列
+            df_daily = res["daily_df"]
+            
+            # 把宽表转成适合 Plotly 画多线的长表 (如果已经是长表请忽略这一步)
+            df_melt = df_daily.melt(id_vars=["Day"], value_vars=["A1", "A2", "A3", "A4"], 
+                                    var_name="场景", value_name="成本 (元)")
+            
+            fig_daily = px.line(
+                df_melt, x="Day", y="成本 (元)", color="场景", 
+                markers=True, title="各场景日度运行成本对比"
+            )
+            fig_daily.update_layout(template="plotly_white", margin=dict(t=50, b=20, l=20, r=20))
+            st.plotly_chart(fig_daily, use_container_width=True)
 
-       # ---------- Tab 3: 收益分配 ----------
+        # ---------- Tab 3: 收益分配 ----------
     with tab3:
         with st.container(border=True):
             st.markdown("#### V2G 总收益分红")
