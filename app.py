@@ -20,13 +20,9 @@ custom_css = """
     [data-testid="stAppViewContainer"] {
         background: radial-gradient(circle at 50% -20%, #112240 0%, #0A0F1A 60%);
     }
-    
-    /* 隐藏默认元素 */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;} /* 隐藏顶部横条 */
+    #MainMenu, footer, header {visibility: hidden;}
 
-    /* 2. 覆盖所有原生组件的突兀白底/白边 */
+    /* 2. 覆盖原生组件底色 */
     div[data-baseweb="select"] > div {
         background-color: rgba(17, 24, 39, 0.7) !important;
         border: 1px solid rgba(0, 229, 255, 0.3) !important;
@@ -38,8 +34,6 @@ custom_css = """
         border: 1px solid #00E5FF !important;
         color: #00E5FF !important;
     }
-    
-    /* 提示框 */
     div[data-testid="stAlert"] {
         background-color: rgba(17, 24, 39, 0.6) !important;
         border: 1px solid rgba(0, 229, 255, 0.4) !important;
@@ -47,7 +41,7 @@ custom_css = """
         color: #E2E8F0 !important;
     }
 
-    /* 3. Tabs 标签页美化 */
+    /* 3. Tabs 美化 */
     button[data-baseweb="tab"] {
         background-color: transparent !important;
         color: #A0AEC0 !important;
@@ -69,55 +63,45 @@ custom_css = """
         cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="5" fill="%2300E676" /><circle cx="16" cy="16" r="12" fill="none" stroke="%2300E676" stroke-width="2" opacity="0.8"/></svg>') 16 16, pointer !important;
     }
     
-    /* 5. 主标题与侧边栏 */
+    /* 5. ★ 黄框：全局主标题放大 */
     .main-title {
-        text-align: center;
+        text-align: center; 
         background: -webkit-linear-gradient(45deg, #00E5FF, #00E676);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 900;
-        margin-top: -10px;
-        margin-bottom: 10px;
-        font-size: 2.5rem;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        font-weight: 900; 
+        margin-top: -15px; 
+        margin-bottom: 5px; 
+        font-size: 3.2rem; /* 放大字号 */
+        letter-spacing: 2px;
+        filter: drop-shadow(0 0 15px rgba(0, 229, 255, 0.3)); /* 增加发光感，使其更具分量 */
     }
     
     .sidebar-header {
-        color: #00E5FF;
-        border-bottom: 2px solid rgba(0, 229, 255, 0.5);
-        padding-bottom: 5px;
-        margin-top: 10px;
-        margin-bottom: 10px;
-        font-size: 1.1rem;
+        color: #00E5FF; border-bottom: 2px solid rgba(0, 229, 255, 0.5);
+        padding-bottom: 5px; margin-top: 10px; margin-bottom: 10px; font-size: 1.1rem;
     }
     
-    /* 6. 数据卡片 */
+    /* 6. 数据卡片与指标 */
     [data-testid="stVerticalBlockBorderWrapper"] {
         background-color: rgba(17, 24, 39, 0.5) !important;
         border: 1px solid rgba(0, 229, 255, 0.2) !important;
-        border-radius: 10px !important;
-        box-shadow: 0 0 20px rgba(0, 229, 255, 0.05) !important;
-        backdrop-filter: blur(10px);
+        border-radius: 10px !important; box-shadow: 0 0 20px rgba(0, 229, 255, 0.05) !important; backdrop-filter: blur(10px);
     }
+    [data-testid="stMetricValue"] { color: #00E5FF !important; font-weight: 700; }
     
-    /* 7. 指标卡数字 */
-    [data-testid="stMetricValue"] {
-        color: #00E5FF !important;
-        font-weight: 700;
-    }
-    
-    /* 8. 按钮发光 */
+    /* 7. 按钮 */
     .stButton>button {
-        background: rgba(0, 230, 118, 0.05) !important;
-        color: #00E676 !important;
-        border: 1px solid rgba(0, 230, 118, 0.5) !important;
-        border-radius: 6px;
-        font-weight: bold;
-        transition: all 0.3s ease;
+        background: rgba(0, 230, 118, 0.05) !important; color: #00E676 !important;
+        border: 1px solid rgba(0, 230, 118, 0.5) !important; border-radius: 6px; font-weight: bold; transition: all 0.3s ease;
     }
     .stButton>button:hover {
-        background: rgba(0, 230, 118, 0.15) !important;
-        box-shadow: 0 0 15px rgba(0, 230, 118, 0.6);
-        border-color: #00E676 !important;
+        background: rgba(0, 230, 118, 0.15) !important; box-shadow: 0 0 15px rgba(0, 230, 118, 0.6); border-color: #00E676 !important;
+    }
+    div[data-testid="stButton"] button:has(div:contains("返回待机页面")) {
+        background: rgba(255, 145, 0, 0.1) !important; color: #FF9100 !important; border: 1px solid rgba(255, 145, 0, 0.5) !important;
+    }
+    div[data-testid="stButton"] button:has(div:contains("返回待机页面")):hover {
+        background: rgba(255, 145, 0, 0.2) !important; box-shadow: 0 0 15px rgba(255, 145, 0, 0.6); border-color: #FF9100 !important;
     }
 </style>
 """
@@ -138,7 +122,6 @@ with st.sidebar:
         format_func=lambda x: {1: "A1: 纯 BESS", 2: "A2: 无序充电", 3: "A3: 智能充电", 4: "A4: 纯 V2G"}[x],
         index=3
     )
-    
     n_ev = st.slider("EV 数量 (辆)", 10, 1500, 200, 10)
     n_days = st.slider("仿真天数 (天)", 1, 30, 2, 1)
     sell_ratio = st.slider("售电比例", 0.1, 1.0, 0.60, 0.05)
@@ -150,7 +133,6 @@ with st.sidebar:
         b2 = st.checkbox("B2: 负荷不确定性", value=CONFIG["B2_load"])
         b3 = st.checkbox("B3: 电价不确定性", value=CONFIG["B3_price"])
         b4 = st.checkbox("B4: EV行为不确定性", value=CONFIG["B4_ev"])
-        
     with st.expander("C 组：工程增强"):
         c1 = st.checkbox("C1: 滚动 MPC", value=CONFIG["C1_rolling"])
         c2 = st.checkbox("C2: CVaR 风险", value=CONFIG["C2_cvar"])
@@ -160,21 +142,22 @@ with st.sidebar:
 
     st.markdown("---")
     run_btn = st.button("🚀 开始仿真计算", type="primary", use_container_width=True)
+    
+    if st.session_state['sim_data'] is not None:
+        if st.button("🔄 返回待机页面", use_container_width=True):
+            st.session_state['sim_data'] = None
+            st.rerun()
 
 # ================= 执行计算 =================
 if run_btn:
     cfg = copy.deepcopy(CONFIG)
-    cfg["A"] = a_mode
-    cfg["n_ev"] = n_ev
-    cfg["n_days"] = n_days
-    cfg["sell_ratio"] = sell_ratio
-    cfg["emergency_ratio"] = emergency_ratio
-    cfg["B1_pv"], cfg["B2_load"], cfg["B3_price"], cfg["B4_ev"] = b1, b2, b3, b4
-    cfg["C1_rolling"], cfg["C2_cvar"], cfg["C3_degradation"] = c1, c2, c3
-    cfg["C4_transformer"], cfg["C5_dod"] = c4, c5
-    cfg["mip_gap"] = 0.05
-    cfg["solve_time_limit"] = 60
-
+    cfg.update({
+        "A": a_mode, "n_ev": n_ev, "n_days": n_days, "sell_ratio": sell_ratio,
+        "emergency_ratio": emergency_ratio, "B1_pv": b1, "B2_load": b2,
+        "B3_price": b3, "B4_ev": b4, "C1_rolling": c1, "C2_cvar": c2,
+        "C3_degradation": c3, "C4_transformer": c4, "C5_dod": c5,
+        "mip_gap": 0.05, "solve_time_limit": 60
+    })
     with st.spinner(f"🧠 正在求解 {n_days} 天、{n_ev} 辆车的 MILP 模型..."):
         try:
             res = run_simulation(copy.deepcopy(cfg), export_files=False)
@@ -188,26 +171,25 @@ if run_btn:
 FUTURE_COLORS = ["#00E5FF", "#00E676", "#7C4DFF", "#FF9100"]
 PLOTLY_TEMPLATE = "plotly_dark"
 
-# 待机状态：紧凑版首页
 if st.session_state['sim_data'] is None:
-    
+    # ★ 待机状态：排版和字体全面放大与上提
     standby_css = """
     <style>
-        /* 极度压缩待机页的上下间距 */
-        .v2g-hero { text-align: center; padding-top: 0vh; margin-bottom: -10px; }
+        .v2g-hero { text-align: center; margin-top: -10px; margin-bottom: -15px; } /* 压缩顶部空间 */
         
-        .hero-title {
-            font-size: 2.8rem; font-weight: 900;
-            background: linear-gradient(90deg, #00E5FF, #00E676, #00E5FF);
-            background-size: 200% auto; -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent; animation: shine 3s linear infinite;
-            margin-bottom: 5px;
+        /* 次标题 */
+        .hero-title { 
+            font-size: 3rem; font-weight: 900; 
+            background: linear-gradient(90deg, #00E5FF, #00E676, #00E5FF); 
+            background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+            animation: shine 3s linear infinite; margin-bottom: 5px; 
         }
         @keyframes shine { to { background-position: 200% center; } }
         
-        .hero-subtitle { color: #A0AEC0; font-size: 1rem; letter-spacing: 3px; margin-bottom: 10px; }
-
-        .topo-container { width: 100%; max-width: 700px; margin: 0 auto; height: 220px; }
+        .hero-subtitle { color: #A0AEC0; font-size: 1.1rem; letter-spacing: 4px; margin-bottom: 0px; }
+        
+        /* ★ 蓝框：SVG 容器往上移 */
+        .topo-container { width: 100%; max-width: 750px; margin: 0 auto; height: 250px; margin-top: -20px; } 
         
         .energy-line { stroke-dasharray: 10 15; animation: flow 1s linear infinite; }
         @keyframes flow { to { stroke-dashoffset: -25; } }
@@ -215,31 +197,46 @@ if st.session_state['sim_data'] is None:
         .glow-node { animation: pulse 2s ease-in-out infinite alternate; }
         @keyframes pulse { from { filter: drop-shadow(0 0 5px #00E5FF); } to { filter: drop-shadow(0 0 20px #00E676); } }
         
-        .feature-card {
-            background: rgba(17, 24, 39, 0.6); border: 1px solid rgba(0, 229, 255, 0.2);
-            border-radius: 10px; padding: 15px 15px; /* 压缩卡片内边距 */
-            transition: all 0.3s ease; height: 100%; /* 保证卡片等高 */
+        /* ★ 红框：放大特性卡片的文字 */
+        .feature-card { 
+            background: rgba(17, 24, 39, 0.6); 
+            border: 1px solid rgba(0, 229, 255, 0.2); 
+            border-radius: 12px; 
+            padding: 20px 20px; /* 增加内边距，配合文字放大 */
+            transition: all 0.3s ease; 
+            height: 100%; 
         }
-        .feature-card:hover {
-            transform: translateY(-3px); border-color: #00E5FF;
-            box-shadow: 0 10px 20px rgba(0, 229, 255, 0.15);
+        .feature-card:hover { 
+            transform: translateY(-5px); 
+            border-color: #00E5FF; 
+            box-shadow: 0 10px 25px rgba(0, 229, 255, 0.15); 
         }
-        .feature-icon { font-size: 2rem; margin-bottom: 10px; }
-        .feature-title { color: #00E5FF; font-size: 1.1rem; font-weight: bold; margin-bottom: 5px; }
-        .feature-desc { color: #8892B0; font-size: 0.85rem; line-height: 1.5; }
+        
+        .feature-icon { font-size: 2.5rem; margin-bottom: 12px; }
+        
+        /* 标题放大 */
+        .feature-title { 
+            color: #00E5FF; 
+            font-size: 1.3rem; /* 1.1 -> 1.3 */
+            font-weight: bold; 
+            margin-bottom: 10px; 
+            letter-spacing: 1px;
+        }
+        
+        /* 正文放大 */
+        .feature-desc { 
+            color: #A0AEC0; /* 颜色稍微调亮一点 */
+            font-size: 1.05rem; /* 0.85 -> 1.05 */
+            line-height: 1.7; /* 增加行高，不显得拥挤 */
+            text-align: justify;
+        }
     </style>
     """
     st.markdown(standby_css, unsafe_allow_html=True)
     
-    # 顶部文字（更紧凑）
-    st.markdown("""
-        <div class="v2g-hero">
-            <h1 class="hero-title">Vehicle-to-Grid</h1>
-            <div class="hero-subtitle">重塑微网能源生态 · 让每一度电都有价值</div>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown("""<div class="v2g-hero"><h1 class="hero-title">Vehicle-to-Grid</h1><div class="hero-subtitle">重塑微网能源生态 · 让每一度电都有价值</div></div>""", unsafe_allow_html=True)
 
-    # 动态 SVG 拓扑图（缩减了高度）
+    # SVG 拓扑图 (内部坐标做了略微等比调整，以适应外框)
     v2g_svg = """
     <div class="topo-container">
         <svg viewBox="0 0 800 250" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
@@ -247,94 +244,55 @@ if st.session_state['sim_data'] is None:
             <line x1="400" y1="125" x2="650" y2="125" stroke="#00E676" stroke-width="3" class="energy-line" />
             
             <g transform="translate(100, 125)" class="glow-node">
-                <circle cx="50" cy="0" r="35" fill="#0A0F1A" stroke="#00E5FF" stroke-width="3" />
-                <text x="50" y="10" fill="#00E5FF" font-size="26" text-anchor="middle" font-weight="bold">🏭</text>
-                <text x="50" y="55" fill="#A0AEC0" font-size="13" text-anchor="middle">大电网</text>
+                <circle cx="50" cy="0" r="40" fill="#0A0F1A" stroke="#00E5FF" stroke-width="3" />
+                <text x="50" y="10" fill="#00E5FF" font-size="30" text-anchor="middle" font-weight="bold">🏭</text>
+                <text x="50" y="65" fill="#A0AEC0" font-size="14" text-anchor="middle">大电网</text>
             </g>
-
+            
             <g transform="translate(350, 125)" class="glow-node">
-                <circle cx="50" cy="0" r="45" fill="#0A0F1A" stroke="#00E5FF" stroke-width="4" />
-                <text x="50" y="10" fill="#00E5FF" font-size="30" text-anchor="middle" font-weight="bold">⚡</text>
-                <text x="50" y="65" fill="#00E5FF" font-size="14" text-anchor="middle" font-weight="bold">V2G 平台</text>
+                <circle cx="50" cy="0" r="50" fill="#0A0F1A" stroke="#00E5FF" stroke-width="4" />
+                <text x="50" y="10" fill="#00E5FF" font-size="35" text-anchor="middle" font-weight="bold">⚡</text>
+                <text x="50" y="75" fill="#00E5FF" font-size="15" text-anchor="middle" font-weight="bold">V2G 平台</text>
             </g>
             
             <g transform="translate(600, 125)" class="glow-node">
-                <circle cx="50" cy="0" r="35" fill="#0A0F1A" stroke="#00E676" stroke-width="3" />
-                <text x="50" y="10" fill="#00E676" font-size="26" text-anchor="middle" font-weight="bold">🚗</text>
-                <text x="50" y="55" fill="#A0AEC0" font-size="13" text-anchor="middle">EV 车队</text>
+                <circle cx="50" cy="0" r="40" fill="#0A0F1A" stroke="#00E676" stroke-width="3" />
+                <text x="50" y="10" fill="#00E676" font-size="30" text-anchor="middle" font-weight="bold">🚗</text>
+                <text x="50" y="65" fill="#A0AEC0" font-size="14" text-anchor="middle">EV 车队</text>
             </g>
             
-            <circle cx="200" cy="125" r="4" fill="#00E5FF" style="filter: drop-shadow(0 0 10px #00E5FF);">
-                <animate attributeName="cx" from="150" to="400" dur="2s" repeatCount="indefinite" />
-            </circle>
-            <circle cx="550" cy="125" r="4" fill="#00E676" style="filter: drop-shadow(0 0 10px #00E676);">
-                <animate attributeName="cx" from="650" to="400" dur="2.5s" repeatCount="indefinite" />
-            </circle>
+            <circle cx="200" cy="125" r="4" fill="#00E5FF" style="filter: drop-shadow(0 0 10px #00E5FF);"><animate attributeName="cx" from="150" to="400" dur="2s" repeatCount="indefinite" /></circle>
+            <circle cx="550" cy="125" r="4" fill="#00E676" style="filter: drop-shadow(0 0 10px #00E676);"><animate attributeName="cx" from="650" to="400" dur="2.5s" repeatCount="indefinite" /></circle>
         </svg>
     </div>
     """
-    # 压缩组件的渲染高度
-    components.html(v2g_svg, height=230)
+    components.html(v2g_svg, height=240) # 整体高度缩减，让下方的卡片更紧凑
 
-    # 下方的特性介绍卡片（去掉了多余的换行符，通过 st.columns 直接紧凑排列）
     st.markdown("<div style='margin-top: -10px;'></div>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns(3)
     
-    with col1:
-        st.markdown("""
-            <div class="feature-card">
-                <div class="feature-icon">🔋</div>
-                <div class="feature-title">海量分布式储能</div>
-                <div class="feature-desc">
-                    将闲置的电动汽车电池转化为微网的巨型“充电宝”，在新能源大发时消纳绿电，在负荷高峰时反向放电。
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+    # 特性卡片
+    col1, col2, col3 = st.columns(3)
+    with col1: 
+        st.markdown("""<div class="feature-card"><div class="feature-icon">🔋</div><div class="feature-title">海量分布式储能</div><div class="feature-desc">将闲置的电动汽车电池转化为微网的巨型“充电宝”，在新能源大发时消纳绿电，在负荷高峰时反向放电。</div></div>""", unsafe_allow_html=True)
+    with col2: 
+        st.markdown("""<div class="feature-card"><div class="feature-icon">📈</div><div class="feature-title">峰谷套利与降本</div><div class="feature-desc">通过智能调度算法（MILP），引导无序充电转向低谷充电，不仅削减微网峰值负荷，更为车主创造真实收益。</div></div>""", unsafe_allow_html=True)
+    with col3: 
+        st.markdown("""<div class="feature-card"><div class="feature-icon">🛡️</div><div class="feature-title">鲁棒性工程增强</div><div class="feature-desc">融合 CVaR 风险度量、变压器容量限制与电池折旧模型，应对光伏、负荷及电价的三重不确定性。</div></div>""", unsafe_allow_html=True)
         
-    with col2:
-        st.markdown("""
-            <div class="feature-card">
-                <div class="feature-icon">📈</div>
-                <div class="feature-title">峰谷套利与降本</div>
-                <div class="feature-desc">
-                    通过智能调度算法（MILP），引导无序充电转向低谷充电，不仅削减微网峰值负荷，更为车主创造真实收益。
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-    with col3:
-        st.markdown("""
-            <div class="feature-card">
-                <div class="feature-icon">🛡️</div>
-                <div class="feature-title">鲁棒性工程增强</div>
-                <div class="feature-desc">
-                    融合 CVaR 风险度量、变压器容量限制与电池折旧模型，应对光伏、负荷及电价的三重不确定性。
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-    # 提示操作（极度上提）
-    st.markdown("""
-        <div style="text-align: center; margin-top: 15px; color: #A0AEC0; font-size: 0.9rem; animation: pulse 2s infinite alternate;">
-            👈 <b>请在左侧控制面板配置参数，启动仿真引擎</b>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown("""<div style="text-align: center; margin-top: 20px; color: #A0AEC0; font-size: 1rem; animation: pulse 2s infinite alternate;">👈 <b>请在左侧控制面板配置参数，启动仿真引擎</b></div>""", unsafe_allow_html=True)
 
-# ================= 有结果时的展示（保持原汁原味） =================
+# ================= 有结果时的展示 =================
 else:
     res = st.session_state['sim_data']
     totals = res["totals"]
     
-    # 1. 顶部核心指标看板
     with st.container(border=True):
         st.markdown("### 📊 核心指标看板 (总成本对比)")
         col1, col2, col3, col4 = st.columns(4)
-        
         col1.metric("A1 纯 BESS", f"{totals['A1']:.0f} 元")
         col2.metric("A2 无序充电", f"{totals['A2']:.0f} 元")
         col3.metric("A3 智能充电", f"{totals['A3']:.0f} 元", delta=f"{totals['A3']-totals['A2']:.0f} 元")
         col4.metric("A4 纯 V2G", f"{totals['A4']:.0f} 元", delta=f"{totals['A4']-totals['A3']:.0f} 元")
-        
         st.info(f"**💡 增量分析：** A2-A3 智能充电降本: `{res['delta'][1]:+.0f}` 元 | **A3-A4 纯 V2G 收益: `{res['delta'][2]:+.0f}` 元**")
 
     tab1, tab2, tab3, tab4 = st.tabs(["📈 微观对比", "📉 日度成本", "💰 收益分配", "💾 数据下载"])
@@ -342,55 +300,68 @@ else:
     # ---------- Tab 1: 交互式微观对比 ----------
     with tab1:
         with st.container(border=True):
-            st.markdown("#### 48 时段运行细节自由对比")
-            
-            c1, c2 = st.columns([1, 2])
+            day_options = ["🌐 全部天数 (全局视图)"] + list(res["df_timeseries"]["Day"].unique())
+            c1, c2, c3 = st.columns([1.5, 2, 3.5])
             with c1:
-                t_day = st.selectbox("选择查看哪一天：", options=res["df_timeseries"]["Day"].unique(), index=0)
+                t_day = st.selectbox("查看时间范围", options=day_options, index=1)
             with c2:
-                t_scens = st.multiselect("选择对比场景：", ["A1", "A2", "A3", "A4"], default=["A3", "A4"])
-
-            y_options = {
-                "Load": "基础负荷 (kW)", "PV": "光伏出力 (kW)",
-                "Grid_Buy": "电网购电 (kW)", "Grid_Sell": "电网售电 (kW)",
-                "EV_Charge": "EV充电 (kW)", "EV_Discharge": "EV放电 (kW)",
-                "BESS_Charge": "BESS充电 (kW)", "BESS_Discharge": "BESS放电 (kW)"
-            }
-            y_cols = st.multiselect("选择叠加的指标：", options=list(y_options.keys()), 
-                                    default=["Load", "EV_Charge", "EV_Discharge"],
-                                    format_func=lambda x: y_options[x])
+                t_scens = st.multiselect("对比场景", ["A1", "A2", "A3", "A4"], default=["A3", "A4"])
+            with c3:
+                y_options = {
+                    "Load": "基础负荷 (kW)", "PV": "光伏出力 (kW)",
+                    "Grid_Buy": "电网购电 (kW)", "Grid_Sell": "电网售电 (kW)",
+                    "EV_Charge": "EV充电 (kW)", "EV_Discharge": "EV放电 (kW)",
+                    "BESS_Charge": "BESS充电 (kW)", "BESS_Discharge": "BESS放电 (kW)"
+                }
+                y_cols = st.multiselect("叠加指标", options=list(y_options.keys()), 
+                                        default=["Load", "EV_Charge", "EV_Discharge"],
+                                        format_func=lambda x: y_options[x])
             
-            df_day = res["df_timeseries"]
-            df_day = df_day[(df_day["Day"] == t_day) & (df_day["Scenario"].isin(t_scens))]
+            if t_day == "🌐 全部天数 (全局视图)":
+                df_day = res["df_timeseries"].copy()
+                df_day["Global_Hour"] = (df_day["Day"] - 1) * 24 + df_day["Hour"]
+                df_price = df_day.drop_duplicates("Global_Hour")
+            else:
+                df_day = res["df_timeseries"][res["df_timeseries"]["Day"] == t_day].copy()
+                df_day["Global_Hour"] = df_day["Hour"]
+                df_price = df_day.drop_duplicates("Global_Hour")
+                
+            df_day = df_day[df_day["Scenario"].isin(t_scens)]
             
             if not df_day.empty and y_cols:
-                df_melt = df_day.melt(id_vars=["Hour", "Scenario", "Price"], value_vars=y_cols, var_name="指标", value_name="功率")
+                df_melt = df_day.melt(id_vars=["Day", "Global_Hour", "Scenario"], value_vars=y_cols, var_name="指标", value_name="功率")
                 df_melt["指标"] = df_melt["指标"].map(y_options)
                 
                 fig = go.Figure()
-                
                 for i, (metric, group) in enumerate(df_melt.groupby("指标")):
                     for scen in t_scens:
                         scen_data = group[group["Scenario"] == scen]
                         if scen_data.empty: continue
+                        
+                        customdata = np.stack((scen_data["Day"], scen_data["Global_Hour"] % 24), axis=-1)
                         fig.add_trace(go.Scatter(
-                            x=scen_data["Hour"], y=scen_data["功率"],
+                            x=scen_data["Global_Hour"], y=scen_data["功率"],
                             name=f"{scen} - {metric}", mode="lines",
+                            customdata=customdata,
+                            hovertemplate="Day %{customdata[0]}, %{customdata[1]:.1f}h<br>功率: %{y:.1f} kW<extra>%{fullData.name}</extra>",
                             line=dict(color=FUTURE_COLORS[i % len(FUTURE_COLORS)], dash='solid' if scen == "A4" else 'dot', width=2)
                         ))
                 
-                df_price = df_day.drop_duplicates("Hour")
+                customdata_price = np.stack((df_price["Day"], df_price["Global_Hour"] % 24), axis=-1)
                 fig.add_trace(go.Scatter(
-                    x=df_price["Hour"], y=df_price["Price"], name="电价 (元/kWh)",
-                    mode="lines", line=dict(color="#B0BEC5", width=2, dash="dash"), yaxis="y2"
+                    x=df_price["Global_Hour"], y=df_price["Price"], name="电价 (元/kWh)",
+                    mode="lines", line=dict(color="#B0BEC5", width=2, dash="dash"), yaxis="y2",
+                    customdata=customdata_price,
+                    hovertemplate="Day %{customdata[0]}, %{customdata[1]:.1f}h<br>电价: %{y:.2f} 元<extra>电价</extra>"
                 ))
                 
+                max_hour = df_day["Global_Hour"].max()
+                dtick = 24 if t_day == "🌐 全部天数 (全局视图)" else 4
+                
                 fig.update_layout(
-                    title=f"Day {t_day} 功率与电价时序对比",
-                    template=PLOTLY_TEMPLATE, 
-                    paper_bgcolor="rgba(0,0,0,0)", 
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    xaxis_title="时间 (小时)",
+                    title="运行细节时序对比" + (" (全局跨天视图)" if t_day == "🌐 全部天数 (全局视图)" else f" (Day {t_day})"),
+                    template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=dtick),
                     yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.05)"),
                     yaxis2=dict(title="电价 (元/kWh)", overlaying="y", side="right", showgrid=False),
                     hovermode="x unified",
@@ -402,95 +373,43 @@ else:
     # ---------- Tab 2: 宏观日度成本 ----------
     with tab2:
         with st.container(border=True):
-            st.markdown("#### 日度成本趋势对比")
-            
             df_daily = res["daily_df"].copy().reset_index()
-            if "Day" not in df_daily.columns:
-                df_daily = df_daily.rename(columns={df_daily.columns[0]: "Day"})
-            
+            if "Day" not in df_daily.columns: df_daily = df_daily.rename(columns={df_daily.columns[0]: "Day"})
             valid_cols = [c for c in ["A1", "A2", "A3", "A4"] if c in df_daily.columns]
             df_melt = df_daily.melt(id_vars=["Day"], value_vars=valid_cols, var_name="场景", value_name="成本 (元)")
-            
-            fig_daily = px.line(
-                df_melt, x="Day", y="成本 (元)", color="场景", 
-                markers=True, title="各场景日度运行成本对比",
-                color_discrete_sequence=FUTURE_COLORS
-            )
+            fig_daily = px.line(df_melt, x="Day", y="成本 (元)", color="场景", markers=True, title="各场景日度运行成本对比", color_discrete_sequence=FUTURE_COLORS)
             fig_daily.update_layout(
-                template=PLOTLY_TEMPLATE, 
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                margin=dict(t=50, b=20, l=20, r=20),
-                xaxis_title="天数",
-                yaxis_title="日总成本 (元)",
-                xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
-                yaxis=dict(gridcolor="rgba(255,255,255,0.05)")
+                template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                margin=dict(t=50, b=20, l=20, r=20), xaxis_title="天数", yaxis_title="日总成本 (元)",
+                xaxis=dict(gridcolor="rgba(255,255,255,0.05)"), yaxis=dict(gridcolor="rgba(255,255,255,0.05)")
             )
             st.plotly_chart(fig_daily, use_container_width=True)
 
     # ---------- Tab 3: 收益分配 ----------
     with tab3:
         with st.container(border=True):
-            st.markdown("#### V2G 总收益分红")
-            
             share_df = res["share_df"].copy()
             share_df["金额(元)"] = share_df["比例"] * res['total_gain']
-            
-            fig_pie = px.pie(
-                share_df, 
-                values='金额(元)', 
-                names='角色', 
-                title=f"V2G 总收益分红 (总计 {res['total_gain']:.0f} 元)",
-                color_discrete_sequence=FUTURE_COLORS,
-                hole=0.5
-            )
-            fig_pie.update_traces(
-                textposition='inside', 
-                texttemplate='<b>%{label}</b><br>%{value:,.0f} 元<br>(%{percent})',
-                hovertemplate='<b>%{label}</b><br>金额: %{value:,.2f} 元<br>占比: %{percent}<extra></extra>',
-                textfont_size=14,
-                marker=dict(line=dict(color='#0A0F1A', width=2))
-            )
-            fig_pie.update_layout(
-                template=PLOTLY_TEMPLATE,
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                margin=dict(t=50, b=20, l=20, r=20)
-            )
+            fig_pie = px.pie(share_df, values='金额(元)', names='角色', title=f"V2G 总收益分红 (总计 {res['total_gain']:.0f} 元)", color_discrete_sequence=FUTURE_COLORS, hole=0.5)
+            fig_pie.update_traces(textposition='inside', texttemplate='<b>%{label}</b><br>%{value:,.0f} 元<br>(%{percent})', hovertemplate='<b>%{label}</b><br>金额: %{value:,.2f} 元<br>占比: %{percent}<extra></extra>', textfont_size=14, marker=dict(line=dict(color='#0A0F1A', width=2)))
+            fig_pie.update_layout(template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=50, b=20, l=20, r=20))
             st.plotly_chart(fig_pie, use_container_width=True)
 
     # ---------- Tab 4: 数据与图表下载 ----------
     with tab4:
         with st.container(border=True):
-            st.markdown("#### 📥 下载仿真结果")
-            
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 res["df_timeseries"].to_excel(writer, sheet_name='48时段详细数据', index=False)
                 res["daily_df"].to_excel(writer, sheet_name='日度成本汇总')
                 res["df_impact"].to_excel(writer, sheet_name='电网冲击指标')
             excel_data = output.getvalue()
-            
             txt_content = f"V2G 仿真汇总\n{'='*30}\n"
-            for k, v in totals.items():
-                txt_content += f"{k} 总成本: {v:.2f} 元\n"
+            for k, v in totals.items(): txt_content += f"{k} 总成本: {v:.2f} 元\n"
             txt_content += f"\nA3-A4 纯 V2G 收益: {res['delta'][2]:.2f} 元\n"
             
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
-                st.download_button(
-                    label="📊 下载完整数据表 (Excel)",
-                    data=excel_data,
-                    file_name=f"V2G_仿真结果_A{a_mode}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    type="primary"
-                )
+                st.download_button("📊 下载完整数据表 (Excel)", data=excel_data, file_name=f"V2G_仿真结果_A{a_mode}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True, type="primary")
             with col_btn2:
-                st.download_button(
-                    label="📄 下载汇总报告 (TXT)",
-                    data=txt_content,
-                    file_name=f"V2G_汇总报告_A{a_mode}.txt",
-                    mime="text/plain",
-                    use_container_width=True
-                )
+                st.download_button("📄 下载汇总报告 (TXT)", data=txt_content, file_name=f"V2G_汇总报告_A{a_mode}.txt", mime="text/plain", use_container_width=True)
