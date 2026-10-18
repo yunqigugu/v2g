@@ -211,14 +211,25 @@ if st.session_state['sim_data'] is not None:
             with col2:
                 st.pyplot(fig_mat, use_container_width=True)
 
-    # ---------- Tab 3: 收益分配 ----------
+       # ---------- Tab 3: 收益分配 ----------
     with tab3:
         with st.container(border=True):
             st.markdown("#### V2G 总收益分红")
-            fig_pie = plot_revenue_share(res["share_df"], res["total_gain"], out_dir=None)
-            col1, col2, col3 = st.columns([1, 8, 1])
-            with col2:
-                st.pyplot(fig_pie, use_container_width=True)
+            
+            # 使用 Plotly 画饼图（完美支持中文）
+            share_df = res["share_df"]
+            fig_pie = px.pie(
+                share_df, 
+                values='金额(元)', 
+                names='角色', 
+                title=f"V2G 总收益分红 (总计 {res['total_gain']:.0f} 元)",
+                color_discrete_sequence=px.colors.qualitative.Pastel,
+                hole=0.4 # 变成环形图更高级
+            )
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            fig_pie.update_layout(margin=dict(t=50, b=20, l=20, r=20))
+            
+            st.plotly_chart(fig_pie, use_container_width=True)
 
     # ---------- Tab 4: 数据与图表下载 ----------
     with tab4:
