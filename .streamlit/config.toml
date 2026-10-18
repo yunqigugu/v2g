@@ -1,0 +1,7 @@
+[theme]
+base = "dark"
+primaryColor = "#00E5FF"            # 核心色：霓虹青蓝
+backgroundColor = "#0A0F1A"         # 背景色：深邃星空蓝
+secondaryBackgroundColor = "#111827" # 侧边栏：深灰蓝
+textColor = "#E2E8F0"               # 文字颜色：柔和亮白
+font = "sans serif"
