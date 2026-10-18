@@ -63,17 +63,13 @@ custom_css = """
         cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="5" fill="%2300E676" /><circle cx="16" cy="16" r="12" fill="none" stroke="%2300E676" stroke-width="2" opacity="0.8"/></svg>') 16 16, pointer !important;
     }
     
-    /* 5. ★ 黄框：全局主标题放大 */
+    /* 5. 主标题与侧边栏 */
     .main-title {
         text-align: center; 
         background: -webkit-linear-gradient(45deg, #00E5FF, #00E676);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        font-weight: 900; 
-        margin-top: -15px; 
-        margin-bottom: 5px; 
-        font-size: 3.2rem; /* 放大字号 */
-        letter-spacing: 2px;
-        filter: drop-shadow(0 0 15px rgba(0, 229, 255, 0.3)); /* 增加发光感，使其更具分量 */
+        font-weight: 900; margin-top: -15px; margin-bottom: 5px; font-size: 3.2rem;
+        letter-spacing: 2px; filter: drop-shadow(0 0 15px rgba(0, 229, 255, 0.3));
     }
     
     .sidebar-header {
@@ -172,113 +168,49 @@ FUTURE_COLORS = ["#00E5FF", "#00E676", "#7C4DFF", "#FF9100"]
 PLOTLY_TEMPLATE = "plotly_dark"
 
 if st.session_state['sim_data'] is None:
-    # ★ 待机状态：排版和字体全面放大与上提
+    # 待机状态
     standby_css = """
     <style>
-        .v2g-hero { text-align: center; margin-top: -10px; margin-bottom: -15px; } /* 压缩顶部空间 */
-        
-        /* 次标题 */
-        .hero-title { 
-            font-size: 3rem; font-weight: 900; 
-            background: linear-gradient(90deg, #00E5FF, #00E676, #00E5FF); 
-            background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
-            animation: shine 3s linear infinite; margin-bottom: 5px; 
-        }
+        .v2g-hero { text-align: center; margin-top: -10px; margin-bottom: -15px; }
+        .hero-title { font-size: 3rem; font-weight: 900; background: linear-gradient(90deg, #00E5FF, #00E676, #00E5FF); background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: shine 3s linear infinite; margin-bottom: 5px; }
         @keyframes shine { to { background-position: 200% center; } }
-        
         .hero-subtitle { color: #A0AEC0; font-size: 1.1rem; letter-spacing: 4px; margin-bottom: 0px; }
-        
-        /* ★ 蓝框：SVG 容器往上移 */
-        .topo-container { width: 100%; max-width: 750px; margin: 0 auto; height: 250px; margin-top: -20px; } 
-        
+        .topo-container { width: 100%; max-width: 750px; margin: 0 auto; height: 250px; margin-top: -20px; }
         .energy-line { stroke-dasharray: 10 15; animation: flow 1s linear infinite; }
         @keyframes flow { to { stroke-dashoffset: -25; } }
-        
         .glow-node { animation: pulse 2s ease-in-out infinite alternate; }
         @keyframes pulse { from { filter: drop-shadow(0 0 5px #00E5FF); } to { filter: drop-shadow(0 0 20px #00E676); } }
-        
-        /* ★ 红框：放大特性卡片的文字 */
-        .feature-card { 
-            background: rgba(17, 24, 39, 0.6); 
-            border: 1px solid rgba(0, 229, 255, 0.2); 
-            border-radius: 12px; 
-            padding: 20px 20px; /* 增加内边距，配合文字放大 */
-            transition: all 0.3s ease; 
-            height: 100%; 
-        }
-        .feature-card:hover { 
-            transform: translateY(-5px); 
-            border-color: #00E5FF; 
-            box-shadow: 0 10px 25px rgba(0, 229, 255, 0.15); 
-        }
-        
+        .feature-card { background: rgba(17, 24, 39, 0.6); border: 1px solid rgba(0, 229, 255, 0.2); border-radius: 12px; padding: 20px 20px; transition: all 0.3s ease; height: 100%; }
+        .feature-card:hover { transform: translateY(-5px); border-color: #00E5FF; box-shadow: 0 10px 25px rgba(0, 229, 255, 0.15); }
         .feature-icon { font-size: 2.5rem; margin-bottom: 12px; }
-        
-        /* 标题放大 */
-        .feature-title { 
-            color: #00E5FF; 
-            font-size: 1.3rem; /* 1.1 -> 1.3 */
-            font-weight: bold; 
-            margin-bottom: 10px; 
-            letter-spacing: 1px;
-        }
-        
-        /* 正文放大 */
-        .feature-desc { 
-            color: #A0AEC0; /* 颜色稍微调亮一点 */
-            font-size: 1.05rem; /* 0.85 -> 1.05 */
-            line-height: 1.7; /* 增加行高，不显得拥挤 */
-            text-align: justify;
-        }
+        .feature-title { color: #00E5FF; font-size: 1.3rem; font-weight: bold; margin-bottom: 10px; letter-spacing: 1px; }
+        .feature-desc { color: #A0AEC0; font-size: 1.05rem; line-height: 1.7; text-align: justify; }
     </style>
     """
     st.markdown(standby_css, unsafe_allow_html=True)
     
     st.markdown("""<div class="v2g-hero"><h1 class="hero-title">Vehicle-to-Grid</h1><div class="hero-subtitle">重塑微网能源生态 · 让每一度电都有价值</div></div>""", unsafe_allow_html=True)
 
-    # SVG 拓扑图 (内部坐标做了略微等比调整，以适应外框)
     v2g_svg = """
     <div class="topo-container">
         <svg viewBox="0 0 800 250" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
             <line x1="150" y1="125" x2="400" y2="125" stroke="#00E5FF" stroke-width="3" class="energy-line" />
             <line x1="400" y1="125" x2="650" y2="125" stroke="#00E676" stroke-width="3" class="energy-line" />
-            
-            <g transform="translate(100, 125)" class="glow-node">
-                <circle cx="50" cy="0" r="40" fill="#0A0F1A" stroke="#00E5FF" stroke-width="3" />
-                <text x="50" y="10" fill="#00E5FF" font-size="30" text-anchor="middle" font-weight="bold">🏭</text>
-                <text x="50" y="65" fill="#A0AEC0" font-size="14" text-anchor="middle">大电网</text>
-            </g>
-            
-            <g transform="translate(350, 125)" class="glow-node">
-                <circle cx="50" cy="0" r="50" fill="#0A0F1A" stroke="#00E5FF" stroke-width="4" />
-                <text x="50" y="10" fill="#00E5FF" font-size="35" text-anchor="middle" font-weight="bold">⚡</text>
-                <text x="50" y="75" fill="#00E5FF" font-size="15" text-anchor="middle" font-weight="bold">V2G 平台</text>
-            </g>
-            
-            <g transform="translate(600, 125)" class="glow-node">
-                <circle cx="50" cy="0" r="40" fill="#0A0F1A" stroke="#00E676" stroke-width="3" />
-                <text x="50" y="10" fill="#00E676" font-size="30" text-anchor="middle" font-weight="bold">🚗</text>
-                <text x="50" y="65" fill="#A0AEC0" font-size="14" text-anchor="middle">EV 车队</text>
-            </g>
-            
+            <g transform="translate(100, 125)" class="glow-node"><circle cx="50" cy="0" r="40" fill="#0A0F1A" stroke="#00E5FF" stroke-width="3" /><text x="50" y="10" fill="#00E5FF" font-size="30" text-anchor="middle" font-weight="bold">🏭</text><text x="50" y="65" fill="#A0AEC0" font-size="14" text-anchor="middle">大电网</text></g>
+            <g transform="translate(350, 125)" class="glow-node"><circle cx="50" cy="0" r="50" fill="#0A0F1A" stroke="#00E5FF" stroke-width="4" /><text x="50" y="10" fill="#00E5FF" font-size="35" text-anchor="middle" font-weight="bold">⚡</text><text x="50" y="75" fill="#00E5FF" font-size="15" text-anchor="middle" font-weight="bold">V2G 平台</text></g>
+            <g transform="translate(600, 125)" class="glow-node"><circle cx="50" cy="0" r="40" fill="#0A0F1A" stroke="#00E676" stroke-width="3" /><text x="50" y="10" fill="#00E676" font-size="30" text-anchor="middle" font-weight="bold">🚗</text><text x="50" y="65" fill="#A0AEC0" font-size="14" text-anchor="middle">EV 车队</text></g>
             <circle cx="200" cy="125" r="4" fill="#00E5FF" style="filter: drop-shadow(0 0 10px #00E5FF);"><animate attributeName="cx" from="150" to="400" dur="2s" repeatCount="indefinite" /></circle>
             <circle cx="550" cy="125" r="4" fill="#00E676" style="filter: drop-shadow(0 0 10px #00E676);"><animate attributeName="cx" from="650" to="400" dur="2.5s" repeatCount="indefinite" /></circle>
         </svg>
     </div>
     """
-    components.html(v2g_svg, height=240) # 整体高度缩减，让下方的卡片更紧凑
+    components.html(v2g_svg, height=240)
 
     st.markdown("<div style='margin-top: -10px;'></div>", unsafe_allow_html=True)
-    
-    # 特性卡片
     col1, col2, col3 = st.columns(3)
-    with col1: 
-        st.markdown("""<div class="feature-card"><div class="feature-icon">🔋</div><div class="feature-title">海量分布式储能</div><div class="feature-desc">将闲置的电动汽车电池转化为微网的巨型“充电宝”，在新能源大发时消纳绿电，在负荷高峰时反向放电。</div></div>""", unsafe_allow_html=True)
-    with col2: 
-        st.markdown("""<div class="feature-card"><div class="feature-icon">📈</div><div class="feature-title">峰谷套利与降本</div><div class="feature-desc">通过智能调度算法（MILP），引导无序充电转向低谷充电，不仅削减微网峰值负荷，更为车主创造真实收益。</div></div>""", unsafe_allow_html=True)
-    with col3: 
-        st.markdown("""<div class="feature-card"><div class="feature-icon">🛡️</div><div class="feature-title">鲁棒性工程增强</div><div class="feature-desc">融合 CVaR 风险度量、变压器容量限制与电池折旧模型，应对光伏、负荷及电价的三重不确定性。</div></div>""", unsafe_allow_html=True)
-        
+    with col1: st.markdown("""<div class="feature-card"><div class="feature-icon">🔋</div><div class="feature-title">海量分布式储能</div><div class="feature-desc">将闲置的电动汽车电池转化为微网的巨型“充电宝”，在新能源大发时消纳绿电，在负荷高峰时反向放电。</div></div>""", unsafe_allow_html=True)
+    with col2: st.markdown("""<div class="feature-card"><div class="feature-icon">📈</div><div class="feature-title">峰谷套利与降本</div><div class="feature-desc">通过智能调度算法（MILP），引导无序充电转向低谷充电，不仅削减微网峰值负荷，更为车主创造真实收益。</div></div>""", unsafe_allow_html=True)
+    with col3: st.markdown("""<div class="feature-card"><div class="feature-icon">🛡️</div><div class="feature-title">鲁棒性工程增强</div><div class="feature-desc">融合 CVaR 风险度量、变压器容量限制与电池折旧模型，应对光伏、负荷及电价的三重不确定性。</div></div>""", unsafe_allow_html=True)
     st.markdown("""<div style="text-align: center; margin-top: 20px; color: #A0AEC0; font-size: 1rem; animation: pulse 2s infinite alternate;">👈 <b>请在左侧控制面板配置参数，启动仿真引擎</b></div>""", unsafe_allow_html=True)
 
 # ================= 有结果时的展示 =================
@@ -297,10 +229,10 @@ else:
 
     tab1, tab2, tab3, tab4 = st.tabs(["📈 微观对比", "📉 日度成本", "💰 收益分配", "💾 数据下载"])
 
-    # ---------- Tab 1: 交互式微观对比 ----------
+    # ---------- Tab 1: 交互式对比 ----------
     with tab1:
         with st.container(border=True):
-            day_options = ["🌐 全部天数 (全局视图)"] + list(res["df_timeseries"]["Day"].unique())
+            day_options = ["🌐 全局趋势视图 (按天汇总)"] + list(res["df_timeseries"]["Day"].unique())
             c1, c2, c3 = st.columns([1.5, 2, 3.5])
             with c1:
                 t_day = st.selectbox("查看时间范围", options=day_options, index=1)
@@ -308,67 +240,98 @@ else:
                 t_scens = st.multiselect("对比场景", ["A1", "A2", "A3", "A4"], default=["A3", "A4"])
             with c3:
                 y_options = {
-                    "Load": "基础负荷 (kW)", "PV": "光伏出力 (kW)",
-                    "Grid_Buy": "电网购电 (kW)", "Grid_Sell": "电网售电 (kW)",
-                    "EV_Charge": "EV充电 (kW)", "EV_Discharge": "EV放电 (kW)",
-                    "BESS_Charge": "BESS充电 (kW)", "BESS_Discharge": "BESS放电 (kW)"
+                    "Load": "基础负荷", "PV": "光伏出力",
+                    "Grid_Buy": "电网购电", "Grid_Sell": "电网售电",
+                    "EV_Charge": "EV充电", "EV_Discharge": "EV放电",
+                    "BESS_Charge": "BESS充电", "BESS_Discharge": "BESS放电"
                 }
                 y_cols = st.multiselect("叠加指标", options=list(y_options.keys()), 
                                         default=["Load", "EV_Charge", "EV_Discharge"],
                                         format_func=lambda x: y_options[x])
             
-            if t_day == "🌐 全部天数 (全局视图)":
-                df_day = res["df_timeseries"].copy()
-                df_day["Global_Hour"] = (df_day["Day"] - 1) * 24 + df_day["Hour"]
-                df_price = df_day.drop_duplicates("Global_Hour")
+            if t_day == "🌐 全局趋势视图 (按天汇总)":
+                # ★ 全新逻辑：按天累加电量，呈现整体宏观趋势
+                df_grouped = res["df_timeseries"].groupby(["Day", "Scenario"])[y_cols].sum().reset_index()
+                # 功率(kW) * 0.5h = 电量(kWh)
+                for col in y_cols:
+                    df_grouped[col] = df_grouped[col] * 0.5
+                
+                df_price_agg = res["df_timeseries"].groupby("Day")["Price"].mean().reset_index()
+                df_grouped = df_grouped[df_grouped["Scenario"].isin(t_scens)]
+                
+                if not df_grouped.empty and y_cols:
+                    df_melt = df_grouped.melt(id_vars=["Day", "Scenario"], value_vars=y_cols, var_name="指标", value_name="电量")
+                    df_melt["指标"] = df_melt["指标"].map(lambda x: y_options[x] + "总量 (kWh)")
+                    
+                    fig = go.Figure()
+                    for i, (metric, group) in enumerate(df_melt.groupby("指标")):
+                        for scen in t_scens:
+                            scen_data = group[group["Scenario"] == scen]
+                            if scen_data.empty: continue
+                            fig.add_trace(go.Scatter(
+                                x=scen_data["Day"], y=scen_data["电量"],
+                                name=f"{scen} - {metric}", mode="lines+markers",
+                                line=dict(color=FUTURE_COLORS[i % len(FUTURE_COLORS)], dash='solid' if scen == "A4" else 'dot', width=2),
+                                marker=dict(size=6)
+                            ))
+                    
+                    fig.add_trace(go.Scatter(
+                        x=df_price_agg["Day"], y=df_price_agg["Price"], name="日均电价 (元/kWh)",
+                        mode="lines+markers", line=dict(color="#B0BEC5", width=2, dash="dash"), yaxis="y2",
+                        marker=dict(size=6, symbol="diamond")
+                    ))
+                    
+                    days = df_grouped["Day"].unique()
+                    dtick = max(1, len(days)//12) # 根据天数动态调整X轴刻度密度
+                    
+                    fig.update_layout(
+                        title="整体趋势概览 (每日累计电量)",
+                        template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        xaxis=dict(title="天数 (Day)", gridcolor="rgba(255,255,255,0.05)", dtick=dtick),
+                        yaxis=dict(title="日累计电量 (kWh)", gridcolor="rgba(255,255,255,0.05)"),
+                        yaxis2=dict(title="日均电价 (元/kWh)", overlaying="y", side="right", showgrid=False),
+                        hovermode="x unified",
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                        margin=dict(l=20, r=20, t=50, b=20)
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
             else:
+                # 单日逻辑：还原最纯粹的 48 时段曲线
                 df_day = res["df_timeseries"][res["df_timeseries"]["Day"] == t_day].copy()
-                df_day["Global_Hour"] = df_day["Hour"]
-                df_price = df_day.drop_duplicates("Global_Hour")
+                df_day = df_day[df_day["Scenario"].isin(t_scens)]
                 
-            df_day = df_day[df_day["Scenario"].isin(t_scens)]
-            
-            if not df_day.empty and y_cols:
-                df_melt = df_day.melt(id_vars=["Day", "Global_Hour", "Scenario"], value_vars=y_cols, var_name="指标", value_name="功率")
-                df_melt["指标"] = df_melt["指标"].map(y_options)
-                
-                fig = go.Figure()
-                for i, (metric, group) in enumerate(df_melt.groupby("指标")):
-                    for scen in t_scens:
-                        scen_data = group[group["Scenario"] == scen]
-                        if scen_data.empty: continue
-                        
-                        customdata = np.stack((scen_data["Day"], scen_data["Global_Hour"] % 24), axis=-1)
-                        fig.add_trace(go.Scatter(
-                            x=scen_data["Global_Hour"], y=scen_data["功率"],
-                            name=f"{scen} - {metric}", mode="lines",
-                            customdata=customdata,
-                            hovertemplate="Day %{customdata[0]}, %{customdata[1]:.1f}h<br>功率: %{y:.1f} kW<extra>%{fullData.name}</extra>",
-                            line=dict(color=FUTURE_COLORS[i % len(FUTURE_COLORS)], dash='solid' if scen == "A4" else 'dot', width=2)
-                        ))
-                
-                customdata_price = np.stack((df_price["Day"], df_price["Global_Hour"] % 24), axis=-1)
-                fig.add_trace(go.Scatter(
-                    x=df_price["Global_Hour"], y=df_price["Price"], name="电价 (元/kWh)",
-                    mode="lines", line=dict(color="#B0BEC5", width=2, dash="dash"), yaxis="y2",
-                    customdata=customdata_price,
-                    hovertemplate="Day %{customdata[0]}, %{customdata[1]:.1f}h<br>电价: %{y:.2f} 元<extra>电价</extra>"
-                ))
-                
-                max_hour = df_day["Global_Hour"].max()
-                dtick = 24 if t_day == "🌐 全部天数 (全局视图)" else 4
-                
-                fig.update_layout(
-                    title="运行细节时序对比" + (" (全局跨天视图)" if t_day == "🌐 全部天数 (全局视图)" else f" (Day {t_day})"),
-                    template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=dtick),
-                    yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.05)"),
-                    yaxis2=dict(title="电价 (元/kWh)", overlaying="y", side="right", showgrid=False),
-                    hovermode="x unified",
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    margin=dict(l=20, r=20, t=50, b=20)
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                if not df_day.empty and y_cols:
+                    df_melt = df_day.melt(id_vars=["Hour", "Scenario", "Price"], value_vars=y_cols, var_name="指标", value_name="功率")
+                    df_melt["指标"] = df_melt["指标"].map(y_options)
+                    
+                    fig = go.Figure()
+                    for i, (metric, group) in enumerate(df_melt.groupby("指标")):
+                        for scen in t_scens:
+                            scen_data = group[group["Scenario"] == scen]
+                            if scen_data.empty: continue
+                            fig.add_trace(go.Scatter(
+                                x=scen_data["Hour"], y=scen_data["功率"],
+                                name=f"{scen} - {metric}", mode="lines",
+                                line=dict(color=FUTURE_COLORS[i % len(FUTURE_COLORS)], dash='solid' if scen == "A4" else 'dot', width=2)
+                            ))
+                    
+                    df_price = df_day.drop_duplicates("Hour")
+                    fig.add_trace(go.Scatter(
+                        x=df_price["Hour"], y=df_price["Price"], name="电价 (元/kWh)",
+                        mode="lines", line=dict(color="#B0BEC5", width=2, dash="dash"), yaxis="y2"
+                    ))
+                    
+                    fig.update_layout(
+                        title=f"Day {t_day} 功率与电价时序对比",
+                        template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=4),
+                        yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.05)"),
+                        yaxis2=dict(title="电价 (元/kWh)", overlaying="y", side="right", showgrid=False),
+                        hovermode="x unified",
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                        margin=dict(l=20, r=20, t=50, b=20)
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
     # ---------- Tab 2: 宏观日度成本 ----------
     with tab2:
