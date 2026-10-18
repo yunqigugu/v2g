@@ -9,44 +9,69 @@ import traceback
 
 from config import CONFIG
 from main import run_simulation
-# 去掉了 plotting 的依赖，彻底告别 Matplotlib 乱码
 
-# ================= 页面基础配置与全局美化 CSS =================
+# ================= 页面基础配置与极客科幻 CSS =================
 st.set_page_config(page_title="V2G 微网仿真控制台", layout="wide", page_icon="⚡")
 
-# 注入自定义 CSS
 custom_css = """
 <style>
-    /* 隐藏右上角主菜单和底部水印 */
+    /* 1. 隐藏右上角主菜单和底部水印 */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* 主标题居中与美化 */
-    .main-title {
-        text-align: center;
-        color: #1f77b4;
-        font-weight: 700;
-        margin-bottom: 20px;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    /* 2. ★ 科幻十字准星光标 (替换默认鼠标) */
+    html, body, [class*="css"] {
+        cursor: crosshair;
     }
     
-    /* 按钮圆角与悬停动画 */
+    /* 3. 主标题：青色霓虹发光效果 */
+    .main-title {
+        text-align: center;
+        color: #00E5FF;
+        font-weight: 800;
+        margin-bottom: 30px;
+        text-shadow: 0 0 10px rgba(0, 229, 255, 0.6), 0 0 20px rgba(0, 229, 255, 0.3);
+        letter-spacing: 2px;
+    }
+    
+    /* 4. 按钮：节能绿发光 + 悬停动效 */
     .stButton>button {
+        background: transparent;
+        color: #00E676 !important;
+        border: 2px solid #00E676;
         border-radius: 8px;
         font-weight: bold;
         transition: all 0.3s ease;
+        box-shadow: 0 0 5px rgba(0, 230, 118, 0.2);
     }
     .stButton>button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        background: rgba(0, 230, 118, 0.1);
+        box-shadow: 0 0 15px rgba(0, 230, 118, 0.8), inset 0 0 10px rgba(0, 230, 118, 0.4);
+        border-color: #00E676;
     }
     
-    /* 侧边栏头部样式 */
+    /* 5. 数据卡片：深蓝底色 + 青色科幻边框 */
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: rgba(17, 24, 39, 0.7) !important;
+        border: 1px solid rgba(0, 229, 255, 0.3) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 0 15px rgba(0, 229, 255, 0.05) !important;
+        backdrop-filter: blur(5px);
+    }
+    
+    /* 6. 侧边栏头部：青色下划线 */
     .sidebar-header {
-        color: #2e86c1;
-        border-bottom: 2px solid #2e86c1;
+        color: #00E5FF;
+        border-bottom: 2px solid rgba(0, 229, 255, 0.5);
         padding-bottom: 5px;
         margin-bottom: 15px;
+        text-shadow: 0 0 5px rgba(0, 229, 255, 0.3);
+    }
+
+    /* 7. 指标卡数字颜色 */
+    [data-testid="stMetricValue"] {
+        color: #00E5FF !important;
     }
 </style>
 """
@@ -68,10 +93,8 @@ with st.sidebar:
         index=3
     )
     
-    # 恢复为滑块样式（上下排列，保证滑动体验）
     n_ev = st.slider("EV 数量 (辆)", min_value=10, max_value=1500, value=200, step=10)
     n_days = st.slider("仿真天数 (天)", min_value=1, max_value=30, value=2, step=1)
-        
     sell_ratio = st.slider("售电比例 (0.1~1.0)", min_value=0.1, max_value=1.0, value=0.60, step=0.05)
     emergency_ratio = st.slider("紧急购电惩罚倍数 (5λ)", min_value=1.0, max_value=10.0, value=5.0, step=0.5)
 
@@ -95,7 +118,6 @@ with st.sidebar:
 # ================= 执行计算 =================
 if run_btn:
     cfg = copy.deepcopy(CONFIG)
-    # 覆盖参数
     cfg["A"] = a_mode
     cfg["n_ev"] = n_ev
     cfg["n_days"] = n_days
@@ -104,12 +126,10 @@ if run_btn:
     cfg["B1_pv"], cfg["B2_load"], cfg["B3_price"], cfg["B4_ev"] = b1, b2, b3, b4
     cfg["C1_rolling"], cfg["C2_cvar"], cfg["C3_degradation"] = c1, c2, c3
     cfg["C4_transformer"], cfg["C5_dod"] = c4, c5
-    
-    # 网页端限制求解时间与精度，防止卡死
     cfg["mip_gap"] = 0.05
     cfg["solve_time_limit"] = 60
 
-    with st.spinner(f"🧠 正在求解 {n_days} 天、{n_ev} 辆车的 MILP 模型，请稍候..."):
+    with st.spinner(f"🧠 正在求解 {n_days} 天、{n_ev} 辆车的 MILP 模型..."):
         try:
             res = run_simulation(copy.deepcopy(cfg), export_files=False)
             st.session_state['sim_data'] = res
@@ -119,6 +139,10 @@ if run_btn:
             st.code(traceback.format_exc()) 
 
 # ================= 结果展示区 =================
+# 颜色定义：科幻蓝、节能绿、暗紫、深橙
+FUTURE_COLORS = ["#00E5FF", "#00E676", "#7C4DFF", "#FF9100"]
+PLOTLY_TEMPLATE = "plotly_dark"
+
 if st.session_state['sim_data'] is not None:
     res = st.session_state['sim_data']
     totals = res["totals"]
@@ -128,22 +152,20 @@ if st.session_state['sim_data'] is not None:
         st.markdown("### 📊 核心指标看板 (总成本对比)")
         col1, col2, col3, col4 = st.columns(4)
         
-        # 使用 delta 属性让数据更有对比感
+        # 去掉了刺眼的红色，全部用白色/青色展示
         col1.metric("A1 纯 BESS", f"{totals['A1']:.0f} 元")
         col2.metric("A2 无序充电", f"{totals['A2']:.0f} 元")
-        col3.metric("A3 智能充电", f"{totals['A3']:.0f} 元", delta=f"{totals['A3']-totals['A2']:.0f} 元", delta_color="inverse")
-        col4.metric("A4 纯 V2G", f"{totals['A4']:.0f} 元", delta=f"{totals['A4']-totals['A3']:.0f} 元", delta_color="inverse")
+        col3.metric("A3 智能充电", f"{totals['A3']:.0f} 元", delta=f"{totals['A3']-totals['A2']:.0f} 元")
+        col4.metric("A4 纯 V2G", f"{totals['A4']:.0f} 元", delta=f"{totals['A4']-totals['A3']:.0f} 元")
         
         st.info(f"**💡 增量分析：** A2-A3 智能充电降本: `{res['delta'][1]:+.0f}` 元 | **A3-A4 纯 V2G 收益: `{res['delta'][2]:+.0f}` 元**")
 
-    # 2. 结果 Tabs
     tab1, tab2, tab3, tab4 = st.tabs(["📈 微观对比", "📉 日度成本", "💰 收益分配", "💾 数据下载"])
 
     # ---------- Tab 1: 交互式微观对比 ----------
     with tab1:
         with st.container(border=True):
             st.markdown("#### 48 时段运行细节自由对比")
-            st.caption("您可以任意叠加：负荷、光伏、电网购售、EV充放、BESS充放。鼠标悬停可查看精准数值，支持框选缩放与图例隐藏。")
             
             c1, c2 = st.columns([1, 2])
             with c1:
@@ -169,7 +191,6 @@ if st.session_state['sim_data'] is not None:
                 df_melt["指标"] = df_melt["指标"].map(y_options)
                 
                 fig = go.Figure()
-                colors = px.colors.qualitative.Plotly
                 
                 for i, (metric, group) in enumerate(df_melt.groupby("指标")):
                     for scen in t_scens:
@@ -178,23 +199,26 @@ if st.session_state['sim_data'] is not None:
                         fig.add_trace(go.Scatter(
                             x=scen_data["Hour"], y=scen_data["功率"],
                             name=f"{scen} - {metric}", mode="lines",
-                            line=dict(color=colors[i % len(colors)], dash='solid' if scen == "A4" else 'dot')
+                            # 使用科幻色系
+                            line=dict(color=FUTURE_COLORS[i % len(FUTURE_COLORS)], dash='solid' if scen == "A4" else 'dot', width=2)
                         ))
                 
                 df_price = df_day.drop_duplicates("Hour")
                 fig.add_trace(go.Scatter(
                     x=df_price["Hour"], y=df_price["Price"], name="电价 (元/kWh)",
-                    mode="lines", line=dict(color="gray", width=2, dash="dash"), yaxis="y2"
+                    mode="lines", line=dict(color="#B0BEC5", width=2, dash="dash"), yaxis="y2"
                 ))
                 
                 fig.update_layout(
                     title=f"Day {t_day} 功率与电价时序对比",
+                    template=PLOTLY_TEMPLATE, # 深色图表
+                    paper_bgcolor="rgba(0,0,0,0)", # 图表背景透明
+                    plot_bgcolor="rgba(0,0,0,0)",
                     xaxis_title="时间 (小时)",
-                    yaxis=dict(title="功率 (kW)"),
+                    yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.1)"),
                     yaxis2=dict(title="电价 (元/kWh)", overlaying="y", side="right", showgrid=False),
                     hovermode="x unified",
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    template="plotly_white",
                     margin=dict(l=20, r=20, t=50, b=20)
                 )
                 st.plotly_chart(fig, use_container_width=True)
@@ -204,29 +228,27 @@ if st.session_state['sim_data'] is not None:
         with st.container(border=True):
             st.markdown("#### 日度成本趋势对比")
             
-            df_daily = res["daily_df"].copy()
-            
-            # 核心修复：把原来的 index (天数) 变成普通列
-            df_daily = df_daily.reset_index()
-            
-            # 兼容处理：如果列名不是 "Day" 而是 "index" 或其他，强制重命名
+            df_daily = res["daily_df"].copy().reset_index()
             if "Day" not in df_daily.columns:
                 df_daily = df_daily.rename(columns={df_daily.columns[0]: "Day"})
             
-            # 提取 A1~A4 列画图
             valid_cols = [c for c in ["A1", "A2", "A3", "A4"] if c in df_daily.columns]
-            df_melt = df_daily.melt(id_vars=["Day"], value_vars=valid_cols, 
-                                    var_name="场景", value_name="成本 (元)")
+            df_melt = df_daily.melt(id_vars=["Day"], value_vars=valid_cols, var_name="场景", value_name="成本 (元)")
             
             fig_daily = px.line(
                 df_melt, x="Day", y="成本 (元)", color="场景", 
-                markers=True, title="各场景日度运行成本对比"
+                markers=True, title="各场景日度运行成本对比",
+                color_discrete_sequence=FUTURE_COLORS # 使用科幻色系
             )
             fig_daily.update_layout(
-                template="plotly_white", 
+                template=PLOTLY_TEMPLATE, 
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
                 margin=dict(t=50, b=20, l=20, r=20),
                 xaxis_title="天数",
-                yaxis_title="日总成本 (元)"
+                yaxis_title="日总成本 (元)",
+                xaxis=dict(gridcolor="rgba(255,255,255,0.1)"),
+                yaxis=dict(gridcolor="rgba(255,255,255,0.1)")
             )
             st.plotly_chart(fig_daily, use_container_width=True)
 
@@ -235,39 +257,37 @@ if st.session_state['sim_data'] is not None:
         with st.container(border=True):
             st.markdown("#### V2G 总收益分红")
             
-            # 核心修复：你的 share_df 只有 "角色" 和 "比例"，我们需要算一下金额
             share_df = res["share_df"].copy()
             share_df["金额(元)"] = share_df["比例"] * res['total_gain']
             
-            # 使用 Plotly 画环形图
             fig_pie = px.pie(
                 share_df, 
                 values='金额(元)', 
                 names='角色', 
                 title=f"V2G 总收益分红 (总计 {res['total_gain']:.0f} 元)",
-                color_discrete_sequence=px.colors.qualitative.Pastel,
-                hole=0.4 # 变成环形图
+                color_discrete_sequence=FUTURE_COLORS, # 统一使用科幻色系
+                hole=0.5
             )
-            
-            # ★ 关键修改：使用 texttemplate 把“具体金额”和“百分比”一起显示在饼图上
             fig_pie.update_traces(
                 textposition='inside', 
-                texttemplate='<b>%{label}</b><br>%{value:,.0f} 元<br>(%{percent})', # 显示金额和百分比，保留0位小数，带千分位
-                hovertemplate='<b>%{label}</b><br>金额: %{value:,.2f} 元<br>占比: %{percent}<extra></extra>', # 鼠标悬停时显示2位小数
-                textfont_size=14 # 稍微调大一点字体
+                texttemplate='<b>%{label}</b><br>%{value:,.0f} 元<br>(%{percent})',
+                hovertemplate='<b>%{label}</b><br>金额: %{value:,.2f} 元<br>占比: %{percent}<extra></extra>',
+                textfont_size=14,
+                marker=dict(line=dict(color='#0A0F1A', width=2)) # 饼图块之间的深色边框，增加立体感
             )
-            
-            fig_pie.update_layout(margin=dict(t=50, b=20, l=20, r=20))
-            
+            fig_pie.update_layout(
+                template=PLOTLY_TEMPLATE,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                margin=dict(t=50, b=20, l=20, r=20)
+            )
             st.plotly_chart(fig_pie, use_container_width=True)
 
     # ---------- Tab 4: 数据与图表下载 ----------
     with tab4:
         with st.container(border=True):
             st.markdown("#### 📥 下载仿真结果")
-            st.caption("所有仿真详细数据和汇总报告均可一键导出，方便科研绘图或撰写报告。")
             
-            # 生成 Excel 的缓冲数据
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 res["df_timeseries"].to_excel(writer, sheet_name='48时段详细数据', index=False)
@@ -275,13 +295,11 @@ if st.session_state['sim_data'] is not None:
                 res["df_impact"].to_excel(writer, sheet_name='电网冲击指标')
             excel_data = output.getvalue()
             
-            # 生成 TXT 的文本数据
             txt_content = f"V2G 仿真汇总\n{'='*30}\n"
             for k, v in totals.items():
                 txt_content += f"{k} 总成本: {v:.2f} 元\n"
             txt_content += f"\nA3-A4 纯 V2G 收益: {res['delta'][2]:.2f} 元\n"
             
-            # 按钮并排显示
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
                 st.download_button(
