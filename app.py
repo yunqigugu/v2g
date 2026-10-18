@@ -68,11 +68,9 @@ with st.sidebar:
         index=3
     )
     
-    col_a, col_b = st.columns(2)
-    with col_a:
-        n_ev = st.number_input("EV 数量 (辆)", min_value=10, max_value=2000, value=200, step=10)
-    with col_b:
-        n_days = st.number_input("仿真天数 (天)", min_value=1, max_value=30, value=2, step=1)
+    # 恢复为滑块样式（上下排列，保证滑动体验）
+    n_ev = st.slider("EV 数量 (辆)", min_value=10, max_value=1500, value=200, step=10)
+    n_days = st.slider("仿真天数 (天)", min_value=1, max_value=30, value=2, step=1)
         
     sell_ratio = st.slider("售电比例 (0.1~1.0)", min_value=0.1, max_value=1.0, value=0.60, step=0.05)
     emergency_ratio = st.slider("紧急购电惩罚倍数 (5λ)", min_value=1.0, max_value=10.0, value=5.0, step=0.5)
@@ -250,7 +248,15 @@ if st.session_state['sim_data'] is not None:
                 color_discrete_sequence=px.colors.qualitative.Pastel,
                 hole=0.4 # 变成环形图
             )
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            
+            # ★ 关键修改：使用 texttemplate 把“具体金额”和“百分比”一起显示在饼图上
+            fig_pie.update_traces(
+                textposition='inside', 
+                texttemplate='<b>%{label}</b><br>%{value:,.0f} 元<br>(%{percent})', # 显示金额和百分比，保留0位小数，带千分位
+                hovertemplate='<b>%{label}</b><br>金额: %{value:,.2f} 元<br>占比: %{percent}<extra></extra>', # 鼠标悬停时显示2位小数
+                textfont_size=14 # 稍微调大一点字体
+            )
+            
             fig_pie.update_layout(margin=dict(t=50, b=20, l=20, r=20))
             
             st.plotly_chart(fig_pie, use_container_width=True)
