@@ -120,6 +120,7 @@ with st.sidebar:
             st.session_state['view_index'] = -1
             st.rerun()
 
+    # ★ 历史快照查看区
     if st.session_state['history_snapshots']:
         st.markdown("<h2 class='sidebar-header'>🕰️ 3. 历史快照</h2>", unsafe_allow_html=True)
         
@@ -190,6 +191,7 @@ else:
         is_viewing_history = True
 
 if current_res is None:
+    # 待机状态
     standby_css = """<style>.v2g-hero{text-align:center;margin-top:-10px;margin-bottom:-15px;}.hero-title{font-size:3rem;font-weight:900;background:linear-gradient(90deg,#00E5FF,#00E676,#00E5FF);background-size:200%auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shine 3s linear infinite;margin-bottom:5px;}@keyframes shine{to{background-position:200%center;}}.hero-subtitle{color:#A0AEC0;font-size:1.1rem;letter-spacing:4px;margin-bottom:0px;}.topo-container{width:100%;max-width:750px;margin:0 auto;height:250px;margin-top:-20px;}.energy-line{stroke-dasharray:10 15;animation:flow 1s linear infinite;}@keyframes flow{to{stroke-dashoffset:-25;}}.glow-node{animation:pulse 2s ease-in-out infinite alternate;}@keyframes pulse{from{filter:drop-shadow(0 0 5px #00E5FF);}to{filter:drop-shadow(0 0 20px #00E676);}}.feature-card{background:rgba(17,24,39,0.6);border:1px solid rgba(0,229,255,0.2);border-radius:12px;padding:20px 20px;transition:all 0.3s ease;height:100%;}.feature-card:hover{transform:translateY(-5px);border-color:#00E5FF;box-shadow:0 10px 25px rgba(0,229,255,0.15);}.feature-icon{font-size:2.5rem;margin-bottom:12px;}.feature-title{color:#00E5FF;font-size:1.3rem;font-weight:bold;margin-bottom:10px;letter-spacing:1px;}.feature-desc{color:#A0AEC0;font-size:1.05rem;line-height:1.7;text-align:justify;}</style>"""
     st.markdown(standby_css, unsafe_allow_html=True)
     st.markdown("""<div class="v2g-hero"><h1 class="hero-title">Vehicle-to-Grid</h1><div class="hero-subtitle">重塑微网能源生态 · 让每一度电都有价值</div></div>""", unsafe_allow_html=True)
@@ -515,7 +517,7 @@ else:
                     st.plotly_chart(fig_bill, use_container_width=True)
                     st.success(f"✅ 橙色柱子减去绿色柱子，剩余的高度差就是每天真实掏的钱。仿真期间 V2G 卖电共为你赚回了 **{total_sell:.0f} 元**。")
 
-                 # ---------- Tab 4: ⚡ 电网冲击分析 (终极精简直观版) ----------
+    # ---------- Tab 4: ⚡ 电网冲击分析 (终极精简直观版) ----------
     with tab_impact:
         with st.container(border=True):
             st.markdown("#### ⚡ 净负荷曲线对比 (削峰填谷效果)")
@@ -595,10 +597,11 @@ else:
             )
             st.plotly_chart(fig_impact, use_container_width=True)
 
-            # ★ 极简、客观的运维诊断与建议 (多维动态专家系统)
+            # ★ 极简、客观的运维诊断与建议 (修复了 HTML 渲染乱码的终极专家系统)
             st.markdown("#### 🧠 净负荷曲线深度诊断与调度建议")
             
-            st.markdown("<div class='advice-box'><h4>📊 曲线异常特征解析：</h4><ul>", unsafe_allow_html=True)
+            # 先用一个字符串把所有内容完整拼接
+            advice_html = "<div class='advice-box'><h4>📊 曲线异常特征解析：</h4><ul>"
             
             # 1. 晚高峰削峰效果
             peak_hours = [17, 18, 19, 20, 21]
@@ -607,9 +610,9 @@ else:
             
             if net_a4_peak < net_a2_peak:
                 reduction = (net_a2_peak - net_a4_peak) / net_a2_peak * 100
-                st.markdown(f"<li><b>✅ 晚高峰削峰有效：</b>A4 成功将 17:00-22:00 的净负荷峰值从 A2 的 {net_a2_peak:.0f} kW 压降至 {net_a4_peak:.0f} kW（降幅 {reduction:.1f}%），避免了变压器严重过载。</li>")
+                advice_html += f"<li><b>✅ 晚高峰削峰有效：</b>A4 成功将 17:00-22:00 的净负荷峰值从 A2 的 {net_a2_peak:.0f} kW 压降至 {net_a4_peak:.0f} kW（降幅 {reduction:.1f}%），避免了变压器严重过载。</li>"
             else:
-                st.markdown(f"<li><b>⚠️ 晚高峰削峰失效：</b>A4 并未有效压制 17:00-22:00 的净负荷峰值（反而达到 {net_a4_peak:.0f} kW）。</li>")
+                advice_html += f"<li><b>⚠️ 晚高峰削峰失效：</b>A4 并未有效压制 17:00-22:00 的净负荷峰值（反而达到 {net_a4_peak:.0f} kW）。</li>"
                 
             # 2. 平时段反送/过度套利
             valley_hours = [0, 1, 2, 3, 4, 5, 12, 13, 14]
@@ -618,20 +621,23 @@ else:
             v_a4 = df_day_impact[df_day_impact["Hour"].isin(valley_hours) & (df_day_impact["Scenario"] == "A4")]["Net_Load"].mean()
             
             if v_a4 > v_a2 * 1.05:
-                st.markdown(f"<li><b>⚠️ 谷时段/平时段负荷反升（过度套利）：</b>在 0:00-6:00 及 12:00-15:00 期间，A4 的净负荷均值（{v_a4:.0f} kW）显著高于 A2（{v_a2:.0f} kW）甚至基础负荷（{v_a1:.0f} kW）。原因是 V2G 算法在低价时段集中大量充电囤电，导致微网购电激增，破坏了原有的谷时平稳性。</li>")
+                advice_html += f"<li><b>⚠️ 谷时段/平时段负荷反升（过度套利）：</b>在 0:00-6:00 及 12:00-15:00 期间，A4 的净负荷均值（{v_a4:.0f} kW）显著高于 A2（{v_a2:.0f} kW）甚至基础负荷（{v_a1:.0f} kW）。原因是 V2G 算法在低价时段集中大量充电囤电，导致微网购电激增，破坏了原有的谷时平稳性。</li>"
             
             # 3. 锯齿效应（高波动性）
             diff_a4 = df_day_impact[df_day_impact["Scenario"] == "A4"]["Net_Load"].diff().abs().mean()
             diff_a1 = df_day_impact[df_day_impact["Scenario"] == "A1"]["Net_Load"].diff().abs().mean()
             if diff_a4 > diff_a1 * 1.5:
-                st.markdown(f"<li><b>⚠️ 曲线锯齿化严重：</b>A4 的相邻时段功率变化率（爬坡率）为 {diff_a4:.0f} kW/半小时，远高于基础负荷的 {diff_a1:.0f} kW/半小时。图中可见在 8:00、15:00 等电价切换点，车辆充放电策略发生激变，对电网造成高频次冲击。</li>")
+                advice_html += f"<li><b>⚠️ 曲线锯齿化严重：</b>A4 的相邻时段功率变化率（爬坡率）为 {diff_a4:.0f} kW/半小时，远高于基础负荷的 {diff_a1:.0f} kW/半小时。图中可见在 8:00、15:00 等电价切换点，车辆充放电策略发生激变，对电网造成高频次冲击。</li>"
 
             # 4. A3 策略的隐患
             net_a3_peak_morning = df_day_impact[df_day_impact["Hour"].isin([7,8,9]) & (df_day_impact["Scenario"] == "A3")]["Net_Load"].max()
             if net_a3_peak_morning > net_a2_peak * 0.95:
-                st.markdown(f"<li><b>🔍 A3 策略的隐患：</b>A3 虽避开了晚高峰，但由于将充电负荷平移，在早高峰（7:00-9:00）形成了新的尖峰（达到 {net_a3_peak_morning:.0f} kW）。这证明单纯的“智能平移”未考虑电网整体承载力。</li>")
+                advice_html += f"<li><b>🔍 A3 策略的隐患：</b>A3 虽避开了晚高峰，但由于将充电负荷平移，在早高峰（7:00-9:00）形成了新的尖峰（达到 {net_a3_peak_morning:.0f} kW）。这证明单纯的“智能平移”未考虑电网整体承载力。</li>"
 
-            st.markdown("</ul></div>", unsafe_allow_html=True)
+            advice_html += "</ul></div>"
+            
+            # 一次性渲染，完美避免乱码
+            st.markdown(advice_html, unsafe_allow_html=True)
 
             # 运维指令/建议折叠面板
             with st.expander("🛠️ 调度指令与算法修正建议"):
@@ -648,8 +654,6 @@ else:
                 *   **修正 A3 平移策略：** 智能充电不能仅避开晚高峰，需设定全天候的负荷上限（如不超过基础负荷的 1.1 倍）。
                 """)
                 
-            st.markdown("</div>", unsafe_allow_html=True)
-            
     # ---------- Tab 5: 收益分配 ----------
     with tab4:
         with st.container(border=True):
