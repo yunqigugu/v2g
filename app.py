@@ -93,7 +93,8 @@ with st.sidebar:
     bess_cap = st.slider("BESS 容量 (kWh)", min_value=1000, max_value=20000, value=10800, step=1000)
     
     n_ev = st.slider("EV 数量 (辆)", 50, 1000, 200, 50, help="演示建议 200-500 辆，过高会导致计算极慢")
-    n_days = st.slider("仿真天数 (天)", 1, 10, 5, 1, help="网页演示建议 5 天内，跑 30 天请本地运行脚本")
+    # ★ 天数上限恢复到 30 天
+    n_days = st.slider("仿真天数 (天)", 1, 30, 5, 1, help="注意：网页端建议不要超过 10 天，跑太长会因算力不足而超时")
     
     sell_ratio = st.slider("售电比例", 0.1, 1.0, 0.60, 0.05)
     emergency_ratio = st.slider("紧急购电惩罚倍数", 1.0, 10.0, 5.0, 0.5)
@@ -114,6 +115,13 @@ with st.sidebar:
     st.markdown("---")
     run_btn = st.button("🚀 开始仿真计算", type="primary", use_container_width=True)
     
+    # ★ 调整位置：紧接着运行按钮放置“返回待机”按钮，只要出结果就必显示
+    if st.session_state['sim_data'] is not None:
+        if st.button("🔄 返回待机页面", use_container_width=True):
+            st.session_state['sim_data'] = None
+            st.session_state['view_index'] = -1
+            st.rerun()
+
     # ★ 历史快照查看区
     if st.session_state['history_snapshots']:
         st.markdown("<h2 class='sidebar-header'>🕰️ 3. 历史快照</h2>", unsafe_allow_html=True)
@@ -134,12 +142,6 @@ with st.sidebar:
             st.session_state['history_snapshots'] = []
             st.session_state['view_index'] = -1
             st.session_state['sim_data'] = None
-            st.rerun()
-
-    if st.session_state['sim_data'] is not None:
-        if st.button("🔄 返回待机页面", use_container_width=True):
-            st.session_state['sim_data'] = None
-            st.session_state['view_index'] = -1
             st.rerun()
 
 # ================= 执行计算 =================
@@ -518,38 +520,94 @@ else:
                     st.plotly_chart(fig_bill, use_container_width=True)
                     st.success(f"✅ 橙色柱子减去绿色柱子，剩余的高度差就是每天真实掏的钱。仿真期间 V2G 卖电共为你赚回了 **{total_sell:.0f} 元**。")
 
-    # ---------- Tab 4: ⚡ 电网冲击分析 (新增) ----------
+        # ---------- Tab 4: ⚡ 电网冲击分析 (全新直观版) ----------
     with tab_impact:
         with st.container(border=True):
-            st.markdown("#### ⚡ 各场景对电网净负荷的冲击指标对比")
-            st.write("微网的净负荷 = 电网购电 - 电网售电。V2G 的核心物理价值就在于**削峰填谷**，平抑净负荷的剧烈波动，减轻对大电网的冲击。")
+            st.markdown("#### ⚡ 净负荷曲线对比 (最直观的削峰填谷)")
+            st.write("微网的净负荷 = 电网购电 - 电网售电。**柱子越低、曲线越平缓，说明对大电网的冲击越小。**")
+            
+            # 提取第一天的数据画曲线
+            df_ts = res["df_timeseries"]
+            t_day_impact = df_ts["Day"].unique()[0]
+            df_day_impact = df_ts[df_ts["Day"] == t_day_impact].copy()
+            
+            # 计算各场景的净负荷
+            df_day_impact["Net_Load"] = df_day_impact["Grid_Buy"] - df_day_impact["Grid_Sell"]
+            
+            fig_net = go.Figure()
+            for i, scen in enumerate(["A2", "A3", "A4"]):
+                df_scen = df_day_impact[df_day_impact["Scenario"] == scen]
+                if df_scen.empty: continue
+                
+                # 画净负荷曲线
+                fig_net.add_trace(go.Scatter(
+                    x=df_scen["Hour"], y=df_scen["Net_Load"],
+                    name=SCENARIO_LABELS.get(scen, scen),
+                    mode="lines",
+                    line=dict(color=FUTURE_COLORS[i], width=3 if scen=="A4" else 2, dash='solid' if scen=="A4" else 'dot')
+                ))
+            
+            # 画基础负荷(无EV)的轮廓作为对照
+            df_load = df_day_impact[df_day_impact["Scenario"] == "A1"]
+            if not df_load.empty:
+                fig_net.add_trace(go.Scatter(
+                    x=df_load["Hour"], y=df_load["Load"],
+                    name="原始基础负荷",
+                    mode="lines", line=dict(color="rgba(255,255,255,0.2)", width=2)
+                ))
+
+            fig_net.update_layout(
+                title=f"Day {t_day_impact} 净负荷曲线对比",
+                template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=4),
+                yaxis=dict(title="净负荷 (kW)", gridcolor="rgba(255,255,255,0.05)"),
+                hovermode="x unified",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                margin=dict(l=20, r=20, t=50, b=20)
+            )
+            st.plotly_chart(fig_net, use_container_width=True)
+            st.info("💡 **解读：** 你可以直观看到，A2（红色虚线）的波峰极高，而 A4（青色实线）把高峰期的净负荷压了下来，填平了低谷，这就是 V2G 的核心价值。")
+
+            st.write("---")
+            st.markdown("#### 📊 冲击指标降低率 (以 A2 无序充电为基准)")
+            st.write("我们把 A2 的冲击指标设为 100%，看看 A3 和 A4 改善了百分之多少。柱子越低（越短），说明对电网越友好。")
             
             df_impact = res["df_impact"].copy()
+            # 以 A2 为基准计算相对百分比
+            base_metrics = ["peak_kw", "p2v_kw", "std_kw"]
+            base_values = df_impact.loc["A2", base_metrics]
             
-            impact_metrics = {
-                "peak_kw": "最大峰值负荷 (kW)",
-                "p2v_kw": "峰谷差 (kW)",
-                "std_kw": "负荷波动标准差 (kW)"
+            for m in base_metrics:
+                df_impact[f"{m}_pct"] = (df_impact[m] / base_values[m]) * 100
+                
+            # 绘制横向条形图
+            fig_impact = go.Figure()
+            
+            metrics_map = {
+                "peak_kw_pct": "最大峰值负荷",
+                "p2v_kw_pct": "峰谷差",
+                "std_kw_pct": "负荷波动标准差"
             }
             
-            fig_impact = go.Figure()
-            for i, (metric, title) in enumerate(impact_metrics.items()):
-                if metric in df_impact.columns:
-                    fig_impact.add_trace(go.Bar(
-                        x=df_impact.index, 
-                        y=df_impact[metric],
-                        name=title,
-                        marker_color=FUTURE_COLORS[i % len(FUTURE_COLORS)],
-                        text=df_impact[metric].round(0),
-                        textposition='outside'
-                    ))
+            for i, (col, name) in enumerate(metrics_map.items()):
+                fig_impact.add_trace(go.Bar(
+                    y=[SCENARIO_LABELS.get(s, s) for s in df_impact.index],
+                    x=df_impact[col],
+                    name=name,
+                    orientation='h',
+                    marker_color=FUTURE_COLORS[i],
+                    text=df_impact[col].apply(lambda x: f"{x:.1f}%"),
+                    textposition='outside'
+                ))
+                
+            fig_impact.add_vline(x=100, line_dash="dash", line_color="red", annotation_text="A2 基准线 (100%)")
             
             fig_impact.update_layout(
                 barmode='group',
                 template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 margin=dict(t=60, b=20, l=20, r=20),
-                xaxis=dict(title="调度场景", tickmode='array', tickvals=df_impact.index, ticktext=[SCENARIO_LABELS.get(i, i) for i in df_impact.index]),
-                yaxis=dict(title="冲击指标量值"),
+                xaxis=dict(title="相对冲击比例 (越低越好)", gridcolor="rgba(255,255,255,0.05)"),
+                yaxis=dict(title="调度场景"),
                 legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
             )
             st.plotly_chart(fig_impact, use_container_width=True)
@@ -557,18 +615,23 @@ else:
             # ★ 智能诊断分析
             st.markdown("#### 🧠 冲击诊断建议")
             
-            p2v_a2 = df_impact.loc["A2", "p2v_kw"] if "A2" in df_impact.index else 0
-            p2v_a3 = df_impact.loc["A3", "p2v_kw"] if "A3" in df_impact.index else 0
-            p2v_a4 = df_impact.loc["A4", "p2v_kw"] if "A4" in df_impact.index else 0
+            p2v_a2 = df_impact.loc["A2", "p2v_kw"]
+            p2v_a3 = df_impact.loc["A3", "p2v_kw"]
+            p2v_a4 = df_impact.loc["A4", "p2v_kw"]
+            
+            peak_a3 = df_impact.loc["A3", "peak_kw"]
+            peak_a4 = df_impact.loc["A4", "peak_kw"]
             
             impact_advice = "<div class='advice-box'><h4>⚡ 电网冲击运行分析：</h4><ul>"
-            impact_advice += f"<li><b>峰谷差平抑效果：</b>A2 无序充电的峰谷差高达 <b>{p2v_a2:.0f} kW</b>，A3 智能充电降为 <b>{p2v_a3:.0f} kW</b>，而 A4 纯 V2G 进一步降至 <b>{p2v_a4:.0f} kW</b>。这说明 V2G 极大地减轻了电网在高峰期的供电压力。</li>"
+            impact_advice += f"<li><b>宏观削峰：</b>相比无序充电 (A2)，A3 和 A4 的最大峰值都有所下降，V2G 有效缓解了变压器的压力。</li>"
             
-            if p2v_a4 < p2v_a3 * 0.95:
+            if p2v_a4 <= p2v_a3:
                 reduction = (p2v_a3 - p2v_a4) / p2v_a3 * 100
-                impact_advice += f"<li><b>V2G 优势显著：</b>相比仅允许智能充电（A3），V2G 策略使微网的峰谷差进一步缩小了 <b>{reduction:.1f}%</b>。这有助于延长变压器寿命，避免线路过载。</li>"
+                impact_advice += f"<li><b>峰谷差改善：</b>A4 (V2G) 的峰谷差相比 A3 进一步缩小了 <b>{reduction:.1f}%</b>。车辆在高峰放电、低谷充电，成功平抑了净负荷波动。</li>"
             else:
-                impact_advice += f"<li><b>优化空间提示：</b>当前 V2G 对峰谷差的改善不明显。建议在侧边栏提高“售电比例”或增加“EV数量”，让车辆更有动力在高峰期放电。</li>"
+                impact_advice += f"<li><b>⚠️ 异常诊断：</b>你可能会发现 A4 的峰谷差（{p2v_a4:.0f} kW）甚至比 A3（{p2v_a3:.0f} kW）还要高！<br>"
+                impact_advice += f"<b>原因分析：</b>这通常是因为 V2G 在追求“低价充电、高价放电”套利时，可能在平时段充了太多电，导致从大电网买电的峰值反而被推高了；或者在非最高峰时段过度放电，拉低了谷值。<br>"
+                impact_advice += f"<b>调整建议：</b>建议在左侧适当调低“售电比例”，或者关闭部分 C 组限制（如 C1 滚动 MPC），让调度算法不要过度追求套利，而是更平滑地贴合负荷曲线。</li>"
                 
             impact_advice += "</ul></div>"
             st.markdown(impact_advice, unsafe_allow_html=True)
