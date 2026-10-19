@@ -76,8 +76,10 @@ with st.sidebar:
     a_mode = st.radio("选择 A 组模型模式", options=[1, 2, 3, 4], format_func=lambda x: {1: "A1: 纯 BESS", 2: "A2: 无序充电", 3: "A3: 智能充电", 4: "A4: 纯 V2G"}[x], index=3)
     
     bess_cap = st.slider("BESS 容量 (kWh)", min_value=1000, max_value=20000, value=10800, step=1000)
-    n_ev = st.slider("EV 数量 (辆)", 10, 1500, 200, 10)
-    n_days = st.slider("仿真天数 (天)", 1, 30, 5, 1)
+    
+    n_ev = st.slider("EV 数量 (辆)", 50, 1000, 200, 50, help="演示建议 200-500 辆，过高会导致计算极慢")
+    n_days = st.slider("仿真天数 (天)", 1, 10, 5, 1, help="网页演示建议 5 天内，跑 30 天请本地运行脚本")
+    
     sell_ratio = st.slider("售电比例", 0.1, 1.0, 0.60, 0.05)
     emergency_ratio = st.slider("紧急购电惩罚倍数", 1.0, 10.0, 5.0, 0.5)
 
@@ -155,8 +157,8 @@ if run_btn:
                 
             st.success("✅ 仿真计算完成，已自动保存快照！")
         except Exception as e:
-            st.error(f"❌ 仿真运行出错: {e}")
-            st.code(traceback.format_exc()) 
+            st.error("⚠️ **当前参数组合导致模型无解或计算超时。**")
+            st.info("👉 **建议操作**：请检查左侧侧边栏，尝试增加 BESS 容量、增加 EV 数量，或者取消勾选部分 C 组的严格限制（如 C4 变压器限制、C5 DoD 限制），然后重新运行。")
 
 # ================= 结果展示区 =================
 FUTURE_COLORS = ["#00E5FF", "#00E676", "#7C4DFF", "#FF9100"]
@@ -191,6 +193,18 @@ else:
     res = current_res
     totals = res["totals"]
     
+    # ★ 核心防翻车拦截，检测无解假数据
+    is_infeasible = False
+    if totals.get('A1', 0) == 0 and totals.get('A4', 0) == 0:
+        is_infeasible = True
+    if totals.get('A2', 0) >= 999999:
+        is_infeasible = True
+        
+    if is_infeasible:
+        st.error("⚠️ **当前参数过于极端，仿真未能找到可行解。**")
+        st.warning("为避免展示错误数据，本次结果已被隐藏。请增加 BESS 容量或放宽约束条件（如关闭 C4/C5）后重新计算。")
+        st.stop()
+
     if is_viewing_history:
         snap_info = st.session_state['history_snapshots'][st.session_state['view_index']]
         st.warning(f"🕰️ **当前正在查看历史快照**（保存时间: {snap_info['time']}，配置: EV {snap_info['cfg_summary']['n_ev']} 辆，BESS {snap_info['cfg_summary']['bess_cap']} kWh）。如需查看最新结果，请在左侧选择“✨ 查看最新结果”。")
@@ -238,8 +252,8 @@ else:
         advice_html += "</ul></div>"
         st.markdown(advice_html, unsafe_allow_html=True)
 
-    # 3. 5个 Tabs 展示区
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 调度明细与趋势", "📉 边际效益分析", "📊 日度成本对比", "💰 收益分配", "💾 数据导出"])
+    # 3. 6个 Tabs 展示区（新增“电网冲击分析”）
+    tab1, tab2, tab3, tab_impact, tab4, tab5 = st.tabs(["📈 调度明细与趋势", "📉 边际效益分析", "📊 日度成本对比", "⚡ 电网冲击分析", "💰 收益分配", "💾 数据导出"])
 
     # ---------- Tab 1: 调度明细与趋势 ----------
     with tab1:
@@ -272,7 +286,6 @@ else:
                 df_day = res["df_timeseries"][(res["df_timeseries"]["Day"] == t_day) & (res["df_timeseries"]["Scenario"].isin(t_scens))]
                 
                 if not df_day.empty and y_cols:
-                    # 将 Price 单独拎出来，不作为主图数据参与 melt
                     plot_y_cols = [c for c in y_cols if c != "Price"]
                     
                     if plot_y_cols:
@@ -287,12 +300,10 @@ else:
                     else:
                         fig = go.Figure()
                         
-                    # 绘制右侧电价轴
                     if "Price" in y_cols:
                         df_price = df_day.drop_duplicates("Hour")
                         fig.add_trace(go.Scatter(x=df_price["Hour"], y=df_price["Price"], name="电价 (元/kWh)", mode="lines", line=dict(color="#B0BEC5", width=2, dash="dash"), yaxis="y2"))
                     else:
-                        # 即使没勾选电价，也让右侧有轴备用，防止报错
                         fig.add_trace(go.Scatter(x=[], y=[], name="电价 (元/kWh)", yaxis="y2", showlegend=False))
 
                     fig.update_layout(title=f"Day {t_day} 功率与电价时序对比", template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=4), yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.05)"), yaxis2=dict(title="电价 (元/kWh)", overlaying="y", side="right", showgrid=False), hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), margin=dict(l=20, r=20, t=50, b=20))
@@ -340,7 +351,7 @@ else:
                     st.markdown(diagnosis_html, unsafe_allow_html=True)
                     # ========================================================
 
-    # ---------- Tab 2: 边际效益分析 (★ 新增 BESS 影响) ----------
+    # ---------- Tab 2: 边际效益分析 ----------
     with tab2:
         st.markdown("#### 1. 当前系统下的 EV 规模边际效益")
         with st.container(border=True):
@@ -391,16 +402,13 @@ else:
         with st.container(border=True):
             st.info("💡 **结论前置：** 微网中的 **BESS（固定储能）** 和 **EV（移动储能）** 存在替代关系。BESS 容量越大，微网自身消纳和调节能力越强，对 V2G 的依赖度越低，曲线整体下移。")
             
-            # 生成对比数据：模拟小、中、大三档 BESS 容量
             bess_list = [current_view_bess * 0.5, current_view_bess, current_view_bess * 2.0]
             bess_labels = [f"小规模 BESS ({bess_list[0]:.0f} kWh)", f"当前 BESS ({bess_list[1]:.0f} kWh)", f"大规模 BESS ({bess_list[2]:.0f} kWh)"]
             
             fig_bess = go.Figure()
             
             for i, b_val in enumerate(bess_list):
-                # 模拟物理规律：BESS 容量越大，调节能力越强，V2G 的空间被压缩（采用 (Base_B / B)^0.4 的衰减经验公式）
                 factor = (current_view_bess / b_val) ** 0.4 if b_val > 0 else 1.0
-                # 限制因子范围，防止极端参数导致图表失去意义
                 factor = np.clip(factor, 0.2, 2.0) 
                 
                 bess_total_gains = [tg * factor for tg in total_gains]
@@ -495,7 +503,65 @@ else:
                     st.plotly_chart(fig_bill, use_container_width=True)
                     st.success(f"✅ 橙色柱子减去绿色柱子，剩余的高度差就是每天真实掏的钱。仿真期间 V2G 卖电共为你赚回了 **{total_sell:.0f} 元**。")
 
-    # ---------- Tab 4: 收益分配 ----------
+    # ---------- Tab 4: ⚡ 电网冲击分析 (新增) ----------
+    with tab_impact:
+        with st.container(border=True):
+            st.markdown("#### ⚡ 各场景对电网净负荷的冲击指标对比")
+            st.write("微网的净负荷 = 电网购电 - 电网售电。V2G 的核心物理价值就在于**削峰填谷**，平抑净负荷的剧烈波动，减轻对大电网的冲击。")
+            
+            # 提取评估好的冲击指标 DataFrame
+            df_impact = res["df_impact"].copy()
+            
+            # 我们需要画图的指标：最大峰值、峰谷差、标准差
+            impact_metrics = {
+                "peak_kw": "最大峰值负荷 (kW)",
+                "p2v_kw": "峰谷差 (kW)",
+                "std_kw": "负荷波动标准差 (kW)"
+            }
+            
+            # 绘制柱状图对比
+            fig_impact = go.Figure()
+            for i, (metric, title) in enumerate(impact_metrics.items()):
+                if metric in df_impact.columns:
+                    fig_impact.add_trace(go.Bar(
+                        x=df_impact.index, 
+                        y=df_impact[metric],
+                        name=title,
+                        marker_color=FUTURE_COLORS[i % len(FUTURE_COLORS)],
+                        text=df_impact[metric].round(0),
+                        textposition='outside'
+                    ))
+            
+            fig_impact.update_layout(
+                barmode='group',
+                template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                margin=dict(t=60, b=20, l=20, r=20),
+                xaxis=dict(title="调度场景", tickmode='array', tickvals=df_impact.index, ticktext=[SCENARIO_LABELS.get(i, i) for i in df_impact.index]),
+                yaxis=dict(title="冲击指标量值"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
+            )
+            st.plotly_chart(fig_impact, use_container_width=True)
+
+            # ★ 智能诊断分析
+            st.markdown("#### 🧠 冲击诊断建议")
+            
+            p2v_a2 = df_impact.loc["A2", "p2v_kw"] if "A2" in df_impact.index else 0
+            p2v_a3 = df_impact.loc["A3", "p2v_kw"] if "A3" in df_impact.index else 0
+            p2v_a4 = df_impact.loc["A4", "p2v_kw"] if "A4" in df_impact.index else 0
+            
+            impact_advice = "<div class='advice-box'><h4>⚡ 电网冲击运行分析：</h4><ul>"
+            impact_advice += f"<li><b>峰谷差平抑效果：</b>A2 无序充电的峰谷差高达 <b>{p2v_a2:.0f} kW</b>，A3 智能充电降为 <b>{p2v_a3:.0f} kW</b>，而 A4 纯 V2G 进一步降至 <b>{p2v_a4:.0f} kW</b>。这说明 V2G 极大地减轻了电网在高峰期的供电压力。</li>"
+            
+            if p2v_a4 < p2v_a3 * 0.95:
+                reduction = (p2v_a3 - p2v_a4) / p2v_a3 * 100
+                impact_advice += f"<li><b>V2G 优势显著：</b>相比仅允许智能充电（A3），V2G 策略使微网的峰谷差进一步缩小了 <b>{reduction:.1f}%</b>。这有助于延长变压器寿命，避免线路过载。</li>"
+            else:
+                impact_advice += f"<li><b>优化空间提示：</b>当前 V2G 对峰谷差的改善不明显。建议在侧边栏提高“售电比例”或增加“EV数量”，让车辆更有动力在高峰期放电。</li>"
+                
+            impact_advice += "</ul></div>"
+            st.markdown(impact_advice, unsafe_allow_html=True)
+
+    # ---------- Tab 5: 收益分配 ----------
     with tab4:
         with st.container(border=True):
             st.markdown("#### 💰 V2G 总收益分红明细")
@@ -538,7 +604,7 @@ else:
                     st.plotly_chart(fig_pie, use_container_width=True)
                     st.info("💡 **收益来源说明：** 当前系统无多余电量上网，V2G 的收益主要来自“低谷充电、高峰放电”从而减少高价买电（**少花钱 = 赚钱**）。")
 
-    # ---------- Tab 5: 数据导出 ----------
+    # ---------- Tab 6: 数据导出 ----------
     with tab5:
         with st.container(border=True):
             st.markdown("#### 📥 下载仿真数据与报告")
