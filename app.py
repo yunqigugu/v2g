@@ -70,7 +70,7 @@ with st.sidebar:
     st.markdown("<h2 class='sidebar-header'>⚙️ 1. 核心参数配置</h2>", unsafe_allow_html=True)
     a_mode = st.radio("选择 A 组模型模式", options=[1, 2, 3, 4], format_func=lambda x: {1: "A1: 纯 BESS", 2: "A2: 无序充电", 3: "A3: 智能充电", 4: "A4: 纯 V2G"}[x], index=3)
     
-    # ★ 新增：BESS 容量滑块
+    # BESS 容量滑块
     bess_cap = st.slider("BESS 容量 (kWh)", min_value=1000, max_value=20000, value=10800, step=1000, help="储能系统最大容量，直接影响微网的自主调节能力")
     
     n_ev = st.slider("EV 数量 (辆)", 10, 1500, 200, 10)
@@ -103,11 +103,12 @@ with st.sidebar:
 if run_btn:
     cfg = copy.deepcopy(CONFIG)
     
-    # ★ 将滑块参数注入 cfg
+    # ★ 将滑块参数注入 cfg，并动态联动物理限制
     cfg.update({
         "A": a_mode, 
         "bess_e_max": bess_cap, 
-        "bess_e0": bess_cap * 0.55,        # 假设初始电量为 55%
+        "bess_e_min": bess_cap * 0.10,     # ★ 核心修复：防止滑块调小后，下限大于上限导致无解
+        "bess_e0": bess_cap * 0.55,        # 初始电量为 55%
         "bess_pc_max": bess_cap / 4.0,     # 假设 4 小时充满
         "bess_pd_max": bess_cap / 4.0,     # 假设 4 小时放完
         "n_ev": n_ev, 
@@ -122,6 +123,7 @@ if run_btn:
     with st.spinner(f"🧠 正在求解 (若参数未变，将秒出缓存结果)..."):
         try:
             res = run_simulation_cached(cfg)
+            res["used_sell_ratio"] = sell_ratio # ★ 修复变量丢失问题
             st.session_state['sim_data'] = res
             st.success("✅ 仿真计算完成！")
         except Exception as e:
@@ -285,7 +287,7 @@ else:
             )
             st.plotly_chart(fig_margin, use_container_width=True)
             
-            bess_cap_display = CONFIG.get("bess_e_max", 10800) 
+            bess_cap_display = bess_cap
             
             if current_per_ev < 1:
                 st.warning(f"⚠️ **运营建议**：当前 **V2G 并没有产生额外正收益**（可能因为电池折旧成本过高，或者 EV 规模太小）。建议调大 EV 规模或放宽放电限制。")
@@ -339,27 +341,24 @@ else:
             # 提取 A4 场景的数据
             df_a4 = res["df_timeseries"][res["df_timeseries"]["Scenario"] == "A4"].copy()
             if not df_a4.empty:
-                # 计算每天的购电花费和售电收益
+                sell_ratio_used = res.get("used_sell_ratio", 0.60) # ★ 安全获取
                 df_a4["Buy_Cost"] = df_a4["Grid_Buy"] * df_a4["Price"] * 0.5
-                # 注意：这里的 sell_ratio 对应侧边栏滑块的值
-                df_a4["Sell_Revenue"] = df_a4["Grid_Sell"] * df_a4["Price"] * cfg["sell_ratio"] * 0.5
+                df_a4["Sell_Revenue"] = df_a4["Grid_Sell"] * df_a4["Price"] * sell_ratio_used * 0.5
                 
                 daily_bill = df_a4.groupby("Day")[["Buy_Cost", "Sell_Revenue"]].sum().reset_index()
                 
                 fig_bill = go.Figure()
-                # 买电支出
                 fig_bill.add_trace(go.Bar(
                     x=daily_bill["Day"], y=daily_bill["Buy_Cost"], 
                     name="向电网买电花费", marker_color="#FF9100" 
                 ))
-                # 卖电收益（用负数表示，画在横轴下方，视觉上抵消成本）
                 fig_bill.add_trace(go.Bar(
                     x=daily_bill["Day"], y=-daily_bill["Sell_Revenue"], 
                     name="向电网卖电赚钱", marker_color="#00E676"
                 ))
                 
                 fig_bill.update_layout(
-                    barmode='relative', # 相对堆叠，正负抵消
+                    barmode='relative',
                     template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                     margin=dict(t=40, b=20, l=20, r=20),
                     xaxis=dict(title="天数 (Day)", tickmode='linear', dtick=1, gridcolor="rgba(255,255,255,0.05)"),
