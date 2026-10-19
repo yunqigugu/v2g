@@ -520,140 +520,111 @@ else:
                     st.plotly_chart(fig_bill, use_container_width=True)
                     st.success(f"✅ 橙色柱子减去绿色柱子，剩余的高度差就是每天真实掏的钱。仿真期间 V2G 卖电共为你赚回了 **{total_sell:.0f} 元**。")
 
-           # ---------- Tab 4: ⚡ 电网冲击分析 (全新直观版) ----------
+              # ---------- Tab 4: ⚡ 电网冲击分析 (终极精简直观版) ----------
     with tab_impact:
         with st.container(border=True):
             st.markdown("#### ⚡ 净负荷曲线对比 (最直观的削峰填谷)")
-            st.write("微网的净负荷 = 电网购电 - 电网售电。**曲线越平缓，说明对大电网的冲击越小。**")
+            st.write("曲线越平缓，说明对大电网的冲击越小。**红线(无序)的尖峰越致命，青线(V2G)的削峰效果就显著。**")
             
-            # 提取第一天的数据画曲线
             df_ts = res["df_timeseries"]
             t_day_impact = df_ts["Day"].unique()[0]
             df_day_impact = df_ts[df_ts["Day"] == t_day_impact].copy()
-            
             df_day_impact["Net_Load"] = df_day_impact["Grid_Buy"] - df_day_impact["Grid_Sell"]
             
             fig_net = go.Figure()
             
-            # 基础负荷轮廓 (灰色背景线)
             df_load = df_day_impact[df_day_impact["Scenario"] == "A1"]
             if not df_load.empty:
-                fig_net.add_trace(go.Scatter(
-                    x=df_load["Hour"], y=df_load["Load"],
-                    name="物理基础负荷 (无EV)",
-                    mode="lines", line=dict(color="rgba(255,255,255,0.2)", width=2, dash="dash")
-                ))
+                fig_net.add_trace(go.Scatter(x=df_load["Hour"], y=df_load["Load"], name="物理基础负荷", mode="lines", line=dict(color="rgba(255,255,255,0.15)", width=2, dash="dash")))
 
-            # A2 无序充电 (红色实线)
             df_a2 = df_day_impact[df_day_impact["Scenario"] == "A2"]
-            fig_net.add_trace(go.Scatter(
-                x=df_a2["Hour"], y=df_a2["Net_Load"],
-                name="A2: 无序充电 (最差)",
-                mode="lines",
-                line=dict(color="#FF4B4B", width=3, dash='solid')
-            ))
+            fig_net.add_trace(go.Scatter(x=df_a2["Hour"], y=df_a2["Net_Load"], name="A2: 无序充电 (最差)", mode="lines", line=dict(color="#FF4B4B", width=3, dash='solid')))
 
-            # A3 智能充电 (橙色虚线)
             df_a3 = df_day_impact[df_day_impact["Scenario"] == "A3"]
-            fig_net.add_trace(go.Scatter(
-                x=df_a3["Hour"], y=df_a3["Net_Load"],
-                name="A3: 智能充电",
-                mode="lines",
-                line=dict(color="#FFA500", width=2, dash='dash')
-            ))
+            fig_net.add_trace(go.Scatter(x=df_a3["Hour"], y=df_a3["Net_Load"], name="A3: 智能充电", mode="lines", line=dict(color="#FFA500", width=2, dash='dash')))
             
-            # A4 V2G (青色发光粗实线)
             df_a4 = df_day_impact[df_day_impact["Scenario"] == "A4"]
-            fig_net.add_trace(go.Scatter(
-                x=df_a4["Hour"], y=df_a4["Net_Load"],
-                name="A4: 纯 V2G (最优)",
-                mode="lines",
-                line=dict(color="#00E5FF", width=4, dash='solid')
-            ))
+            fig_net.add_trace(go.Scatter(x=df_a4["Hour"], y=df_a4["Net_Load"], name="A4: 纯 V2G (最优)", mode="lines", line=dict(color="#00E5FF", width=4, dash='solid')))
             
             fig_net.update_layout(
-                title=f"Day {t_day_impact} 净负荷曲线对比",
                 template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=4),
                 yaxis=dict(title="净负荷 (kW)", gridcolor="rgba(255,255,255,0.05)"),
                 hovermode="x unified",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-                margin=dict(l=20, r=20, t=50, b=20)
+                margin=dict(l=20, r=20, t=30, b=20)
             )
             st.plotly_chart(fig_net, use_container_width=True)
-            st.info("💡 **解读：** 你可以直观看到，**红色实线**的波峰极高，而 **青色粗实线** 把高峰期的净负荷压了下来，填平了低谷，这就是 V2G 的核心价值。")
 
             st.write("---")
-            st.markdown("#### 📊 冲击指标降低率 (以 A2 无序充电为基准)")
-            st.write("我们将 A2 的冲击指标设为 100%。**柱子越过红色基准线越少，说明改善越明显。**")
+            
+            # 使用雷达图（极坐标）替代丑陋的横向柱状图
+            st.markdown("#### 📊 冲击指标综合雷达图 (以 A2 为 100% 基准)")
+            st.write("雷达图越向中心收缩，说明各项冲击指标越低，对电网越友好。")
             
             df_impact = res["df_impact"].copy()
-            # 以 A2 为基准计算相对百分比
             base_metrics = ["peak_kw", "p2v_kw", "std_kw"]
             base_values = df_impact.loc["A2", base_metrics]
             
             for m in base_metrics:
                 df_impact[f"{m}_pct"] = (df_impact[m] / base_values[m]) * 100
-                
-            # 绘制横向条形图
-            fig_impact = go.Figure()
-            
-            metrics_map = {
-                "peak_kw_pct": "最大峰值负荷",
-                "p2v_kw_pct": "峰谷差",
-                "std_kw_pct": "负荷波动标准差"
-            }
-            
-            for i, (col, name) in enumerate(metrics_map.items()):
-                fig_impact.add_trace(go.Bar(
-                    y=[SCENARIO_LABELS.get(s, s) for s in df_impact.index],
-                    x=df_impact[col],
-                    name=name,
-                    orientation='h',
-                    marker_color=FUTURE_COLORS[i],
-                    text=df_impact[col].apply(lambda x: f"{x:.1f}%"),
-                    textposition='outside'
-                ))
-                
-            # 加粗且加深基准线，让人一眼看到
-            fig_impact.add_vline(
-                x=100, line_dash="solid", line_color="#FF4B4B", line_width=3,
-                annotation_text="A2 基准线 (100%)", annotation_position="top right", annotation_font_color="#FF4B4B"
-            )
-            
-            fig_impact.update_layout(
-                barmode='group',
-                template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                margin=dict(t=60, b=20, l=20, r=20),
-                xaxis=dict(title="相对冲击比例 (低于100%代表有改善)", gridcolor="rgba(255,255,255,0.05)", range=[0, 120]), # 限制X轴最大值为120，留出文字空间
-                yaxis=dict(title="调度场景"),
-                legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
-            )
-            st.plotly_chart(fig_impact, use_container_width=True)
 
-            # ★ 智能诊断分析
-            st.markdown("#### 🧠 冲击诊断与平稳度优化建议")
+            # 雷达图类别
+            categories = ['峰值负荷', '峰谷差', '波动标准差']
             
-            p2v_a2 = df_impact.loc["A2", "p2v_kw"]
+            fig_radar = go.Figure()
+
+            # 画 A2 基准线（100%）
+            fig_radar.add_trace(go.Scatterpolar(
+                r=[100, 100, 100], theta=categories, fill='toself', name='A2 基准 (100%)',
+                line=dict(color='rgba(255, 75, 75, 0.5)', width=2, dash='dot'), fillcolor='rgba(255, 75, 75, 0.1)'
+            ))
+
+            colors = {"A1": "#7C4DFF", "A3": "#FFA500", "A4": "#00E5FF"}
+            for scen in ["A1", "A3", "A4"]:
+                if scen in df_impact.index:
+                    vals = [df_impact.loc[scen, "peak_kw_pct"], df_impact.loc[scen, "p2v_kw_pct"], df_impact.loc[scen, "std_kw_pct"]]
+                    # 首尾相连形成闭合多边形
+                    vals.append(vals[0])
+                    cats = categories + [categories[0]]
+                    
+                    fig_radar.add_trace(go.Scatterpolar(
+                        r=vals, theta=cats, fill='toself', name=SCENARIO_LABELS.get(scen, scen),
+                        line=dict(color=colors[scen], width=3), fillcolor=f"rgba({int(colors[scen][1:3], 16)}, {int(colors[scen][3:5], 16)}, {int(colors[scen][5:7], 16)}, 0.15)"
+                    ))
+
+            fig_radar.update_layout(
+                polar=dict(
+                    radialaxis=dict(visible=True, range=[0, 110], gridcolor="rgba(255,255,255,0.1)"),
+                    bgcolor="rgba(0,0,0,0)"
+                ),
+                showlegend=True,
+                template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                margin=dict(t=40, b=40, l=40, r=40)
+            )
+            st.plotly_chart(fig_radar, use_container_width=True)
+
+            # ★ 极简智能诊断与折叠建议
             p2v_a3 = df_impact.loc["A3", "p2v_kw"]
             p2v_a4 = df_impact.loc["A4", "p2v_kw"]
             
-            impact_advice = "<div class='advice-box'><h4>⚡ 电网冲击运行分析：</h4><ul>"
+            st.markdown("#### 🧠 冲击诊断")
             
             if p2v_a4 <= p2v_a3:
-                reduction = (p2v_a3 - p2v_a4) / p2v_a3 * 100
-                impact_advice += f"<li><b>✅ 削峰填谷成功：</b>相比 A3（智能充电），A4（V2G）使峰谷差进一步缩小了 <b>{reduction:.1f}%</b>。车辆在高峰放电、低谷充电，成功平抑了净负荷波动。</li>"
+                st.success(f"✅ **V2G 削峰填谷成功：** A4 的峰谷差相比 A3 进一步缩小了 **{(p2v_a3 - p2v_a4)/p2v_a3*100:.1f}%**，各项指标均向雷达图中心收紧。")
             else:
-                impact_advice += f"<li><b>⚠️ 异常诊断 (V2G反噬)：</b>你可能注意到了，图中的青色实线在平时段反而冲出了几个尖峰，导致 A4 的峰谷差（{p2v_a4:.0f} kW）甚至比 A3（{p2v_a3:.0f} kW）还要高！<br>"
-                impact_advice += f"<b>原因分析：</b>这是因为 V2G 在追求“低价充电、高价放电”套利时，可能在平时段为了囤电充得太猛，导致向大电网买电的峰值反而被推高了。<br>"
-            
-            # 增加平稳度优化建议
-            impact_advice += f"<br><b>🛠️ 如何让电网更平稳（解决曲线锯齿）？</b>"
-            impact_advice += f"<br><b>实操建议（立竿见影）：</b>去左侧侧边栏把 <b>‘售电比例’</b> 从 0.6 降到 0.3 或 0.4，算法就不会那么激进地去‘囤电套利’，曲线会明显平滑很多。同时，把 <b>‘EV 数量’</b> 调到 500 辆以上，规模效应会平滑掉个体行为的毛刺。"
-            impact_advice += f"<br><b>技术升级（写进PPT里的高级货）：</b>如果在答辩时老师问起，你可以这样回答：<i>‘老师，目前的锯齿是因为 MILP 算法在追求绝对的经济最优，导致了过度套利。在未来的工程应用中，我会在目标函数中引入“负荷波动平滑惩罚项 (Smoothing Penalty)”，通过牺牲极小部分的套利收益，来换取电网的绝对平稳。’</i></li>"
+                st.warning(f"⚠️ **V2G 反噬：** A4 的峰谷差（{p2v_a4:.0f} kW）反超了 A3（{p2v_a3:.0f} kW）。算法在追求“低价囤电、高价放电”时过度套利，导致平时段买电峰值突增。")
+
+            # 将冗长的建议折叠起来
+            with st.expander("🛠️ 点击展开：如何让曲线更平滑？(实操与答辩指南)"):
+                st.markdown("""
+                **实操建议（立竿见影）：**
+                *   去左侧侧边栏，把 **“售电比例”** 从 0.6 降到 0.3 或 0.4。算法发现套利空间不大，就不会再疯狂囤电。
+                *   把 **“EV 数量”** 调到 500 辆以上，规模效应会抹平个体行为的毛刺。
                 
-            impact_advice += "</ul></div>"
-            st.markdown(impact_advice, unsafe_allow_html=True)
+                **💡 答辩/PPT高级话术：**
+                *   如果老师问起锯齿问题，你可以说：“*目前的锯齿是因为 MILP 在追求绝对经济最优，导致了过度套利。在未来工程应用中，我会在目标函数中引入**‘负荷波动平滑惩罚项 (Smoothing Penalty)’**，以微小的收益代价换取电网的绝对平稳。*”
+                """)
             
     # ---------- Tab 5: 收益分配 ----------
     with tab4:
