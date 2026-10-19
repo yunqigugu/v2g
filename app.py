@@ -103,14 +103,14 @@ with st.sidebar:
 if run_btn:
     cfg = copy.deepcopy(CONFIG)
     
-    # ★ 将滑块参数注入 cfg，并动态联动物理限制
+    # 注入参数
     cfg.update({
         "A": a_mode, 
         "bess_e_max": bess_cap, 
-        "bess_e_min": bess_cap * 0.10,     # ★ 核心修复：防止滑块调小后，下限大于上限导致无解
-        "bess_e0": bess_cap * 0.55,        # 初始电量为 55%
-        "bess_pc_max": bess_cap / 4.0,     # 假设 4 小时充满
-        "bess_pd_max": bess_cap / 4.0,     # 假设 4 小时放完
+        "bess_e_min": bess_cap * 0.10, 
+        "bess_e0": bess_cap * 0.55,        
+        "bess_pc_max": bess_cap / 4.0,     
+        "bess_pd_max": bess_cap / 4.0,     
         "n_ev": n_ev, 
         "n_days": n_days, 
         "sell_ratio": sell_ratio, 
@@ -123,7 +123,7 @@ if run_btn:
     with st.spinner(f"🧠 正在求解 (若参数未变，将秒出缓存结果)..."):
         try:
             res = run_simulation_cached(cfg)
-            res["used_sell_ratio"] = sell_ratio # ★ 修复变量丢失问题
+            res["used_sell_ratio"] = sell_ratio
             st.session_state['sim_data'] = res
             st.success("✅ 仿真计算完成！")
         except Exception as e:
@@ -196,8 +196,8 @@ else:
         advice_html += "</ul></div>"
         st.markdown(advice_html, unsafe_allow_html=True)
 
-    # 3. 4个 Tabs 展示区
-    tab1, tab2, tab3, tab4 = st.tabs(["📈 调度明细与趋势", "📉 边际效益分析", "📊 日度成本对比", "💰 收益分配与导出"])
+    # 3. 5个 Tabs 展示区
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 调度明细与趋势", "📉 边际效益分析", "📊 日度成本对比", "💰 收益分配", "💾 数据导出"])
 
     # ---------- Tab 1: 调度明细与趋势 ----------
     with tab1:
@@ -335,66 +335,135 @@ else:
             st.info("💡 **解读：** 柱子越低代表该策略在当天的成本控制越优秀。你可以通过切换左侧侧边栏的 BESS 容量，观察四个柱子的高度变化。")
 
             # 2. 成本构成拆解 (以表现最优的 V2G 为例)
-            st.markdown("<br>#### 🔍 V2G (A4) 单日成本账单拆解", unsafe_allow_html=True)
-            st.write("因为 V2G 允许卖电，我们把它每天的账单拆开看。买电是支出（红色），卖电是收入（绿色），两者的差额就是最终的总成本。")
+            st.write("---") 
+            st.subheader("🔍 V2G (A4) 单日成本账单拆解")
+            st.write("买电是支出（橙色），卖电是收入（绿色，画在横轴下方）。两者的差额就是你在 A4 场景下每天真实掏的钱。")
             
-            # 提取 A4 场景的数据
             df_a4 = res["df_timeseries"][res["df_timeseries"]["Scenario"] == "A4"].copy()
             if not df_a4.empty:
-                sell_ratio_used = res.get("used_sell_ratio", 0.60) # ★ 安全获取
+                sell_ratio_used = res.get("used_sell_ratio", 0.60)
                 df_a4["Buy_Cost"] = df_a4["Grid_Buy"] * df_a4["Price"] * 0.5
                 df_a4["Sell_Revenue"] = df_a4["Grid_Sell"] * df_a4["Price"] * sell_ratio_used * 0.5
                 
                 daily_bill = df_a4.groupby("Day")[["Buy_Cost", "Sell_Revenue"]].sum().reset_index()
+                total_sell = daily_bill["Sell_Revenue"].sum()
                 
-                fig_bill = go.Figure()
-                fig_bill.add_trace(go.Bar(
-                    x=daily_bill["Day"], y=daily_bill["Buy_Cost"], 
-                    name="向电网买电花费", marker_color="#FF9100" 
-                ))
-                fig_bill.add_trace(go.Bar(
-                    x=daily_bill["Day"], y=-daily_bill["Sell_Revenue"], 
-                    name="向电网卖电赚钱", marker_color="#00E676"
-                ))
-                
-                fig_bill.update_layout(
-                    barmode='relative',
-                    template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    margin=dict(t=40, b=20, l=20, r=20),
-                    xaxis=dict(title="天数 (Day)", tickmode='linear', dtick=1, gridcolor="rgba(255,255,255,0.05)"),
-                    yaxis=dict(title="金额 (元)", gridcolor="rgba(255,255,255,0.05)"),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
-                )
-                st.plotly_chart(fig_bill, use_container_width=True)
-                
-                st.success("✅ **看懂了吗？** 橙色柱子（买电支出）减去绿色柱子（卖电收益），剩余的高度差就是你在 A4 场景下每天真实掏的钱。")
+                # ★ 核心优化：如果没有卖电收益，不画图表，直接出提示
+                if total_sell < 1.0:
+                    st.info("💡 **提示**：在当前的负荷与光伏比例下，微网处于极度缺电状态，V2G车辆主要通过“削峰填谷”减少微网向电网的买电，并未产生多余电量向电网售电（**无售电收益**）。")
+                else:
+                    fig_bill = go.Figure()
+                    fig_bill.add_trace(go.Bar(
+                        x=daily_bill["Day"], y=daily_bill["Buy_Cost"], 
+                        name="向电网买电花费", marker_color="#FF9100" 
+                    ))
+                    fig_bill.add_trace(go.Bar(
+                        x=daily_bill["Day"], y=-daily_bill["Sell_Revenue"], 
+                        name="向电网卖电赚钱", marker_color="#00E676"
+                    ))
+                    
+                    fig_bill.update_layout(
+                        barmode='relative',
+                        template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        margin=dict(t=40, b=20, l=20, r=20),
+                        xaxis=dict(title="天数 (Day)", tickmode='linear', dtick=1, gridcolor="rgba(255,255,255,0.05)"),
+                        yaxis=dict(title="金额 (元)", gridcolor="rgba(255,255,255,0.05)"),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+                    )
+                    st.plotly_chart(fig_bill, use_container_width=True)
+                    st.success(f"✅ **看懂了吗？** 橙色柱子减去绿色柱子，剩余的高度差就是你每天真实掏的钱。仿真期间 V2G 卖电共为你赚回了 **{total_sell:.0f} 元**。")
 
-    # ---------- Tab 4: 收益分配与导出 ----------
+    # ---------- Tab 4: 收益分配 ----------
     with tab4:
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            with st.container(border=True):
-                st.markdown("#### 💰 V2G 总收益分红")
-                share_df = res["share_df"].copy()
-                share_df["金额(元)"] = share_df["比例"] * res['total_gain']
-                fig_pie = px.pie(share_df, values='金额(元)', names='角色', title=f"总收益 {res['total_gain']:.0f} 元", color_discrete_sequence=FUTURE_COLORS, hole=0.5)
-                fig_pie.update_traces(textposition='inside', texttemplate='<b>%{label}</b><br>%{value:,.0f} 元<br>(%{percent})', textfont_size=14, marker=dict(line=dict(color='#0A0F1A', width=2)))
-                fig_pie.update_layout(template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=40, b=10, l=10, r=10), showlegend=False)
-                st.plotly_chart(fig_pie, use_container_width=True)
-
-        with c2:
-            with st.container(border=True):
-                st.markdown("#### 📥 数据导出")
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    res["df_timeseries"].to_excel(writer, sheet_name='48时段详细数据', index=False)
-                    res["daily_df"].to_excel(writer, sheet_name='日度成本汇总')
-                    res["df_impact"].to_excel(writer, sheet_name='电网冲击指标')
-                excel_data = output.getvalue()
-                txt_content = f"V2G 仿真汇总\n{'='*30}\n"
-                for k, v in totals.items(): txt_content += f"{k} 总成本: {v:.2f} 元\n"
-                txt_content += f"\nA3-A4 纯 V2G 收益: {res['delta'][2]:.2f} 元\n"
+        with st.container(border=True):
+            st.markdown("#### 💰 V2G 总收益分红明细")
+            
+            # 1. 重新计算卖电收益
+            df_a4 = res["df_timeseries"][res["df_timeseries"]["Scenario"] == "A4"]
+            sell_ratio_used = res.get("used_sell_ratio", 0.60)
+            total_sell = (df_a4["Grid_Sell"] * df_a4["Price"] * sell_ratio_used * 0.5).sum()
+            
+            total_gain = res['total_gain']
+            
+            # 2. 判断是否包含卖电收益
+            if total_sell > 1.0:
+                # ★ 包含卖电收益：使用旭日图分层展示
+                total_arbitrage = max(total_gain - total_sell, 0)
                 
-                st.write("所有仿真详细数据和图表均可一键导出。")
-                st.download_button("📊 下载完整数据表 (Excel)", data=excel_data, file_name=f"V2G_仿真结果.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True, type="primary")
-                st.download_button("📄 下载汇总报告 (TXT)", data=txt_content, file_name=f"V2G_汇总报告.txt", mime="text/plain", use_container_width=True)
+                sun_data = []
+                for _, row in res["share_df"].iterrows():
+                    role = row["角色"]
+                    prop = row["比例"]
+                    if total_arbitrage > 0:
+                        sun_data.append({"总收益": "总收益", "收益来源": "削峰填谷降本", "角色": role, "金额": total_arbitrage * prop})
+                    sun_data.append({"总收益": "总收益", "收益来源": "向电网卖电", "角色": role, "金额": total_sell * prop})
+                
+                df_sun = pd.DataFrame(sun_data)
+                
+                # 使用 Plotly 旭日图
+                fig_pie = px.sunburst(
+                    df_sun, 
+                    path=['总收益', '收益来源', '角色'], 
+                    values='金额',
+                    color='收益来源',
+                    color_discrete_map={"削峰填谷降本": "#00E676", "向电网卖电": "#00E5FF"},
+                    template=PLOTLY_TEMPLATE
+                )
+                fig_pie.update_layout(margin=dict(t=40, b=10, l=10, r=10), paper_bgcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig_pie, use_container_width=True)
+                
+                st.info(f"💡 **收益拆分说明：** 在总计 **{total_gain:.0f} 元** 的收益中，**{total_arbitrage:.0f} 元** 来自于“削峰填谷降本”，**{total_sell:.0f} 元** 来自于“向电网卖电”。")
+                
+            else:
+                # 只有降本收益：保持原来的环形图
+                share_df = res["share_df"].copy()
+                share_df["金额(元)"] = share_df["比例"] * total_gain
+                
+                c1, c2, c3 = st.columns([1, 2, 1])
+                with c2:
+                    fig_pie = px.pie(
+                        share_df, values='金额(元)', names='角色', 
+                        title=f"削峰填谷降本分红 (总计 {total_gain:.0f} 元)", 
+                        color_discrete_sequence=FUTURE_COLORS, hole=0.5
+                    )
+                    fig_pie.update_traces(textposition='inside', texttemplate='<b>%{label}</b><br>%{value:,.0f} 元<br>(%{percent})', textfont_size=14, marker=dict(line=dict(color='#0A0F1A', width=2)))
+                    fig_pie.update_layout(template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=50, b=10, l=10, r=10), showlegend=False)
+                    st.plotly_chart(fig_pie, use_container_width=True)
+                    
+                    st.info("💡 **收益来源说明：** 当前系统无多余电量上网，V2G 的收益主要来自“低谷充电、高峰放电”从而减少高价买电（**少花钱 = 赚钱**）。我们把这部分省下来的钱按比例分红。")
+
+    # ---------- Tab 5: 数据导出 ----------
+    with tab5:
+        with st.container(border=True):
+            st.markdown("#### 📥 下载仿真数据与报告")
+            st.write("所有仿真详细数据和汇总报告均可一键导出，方便科研绘图或撰写报告。")
+            
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                res["df_timeseries"].to_excel(writer, sheet_name='48时段详细数据', index=False)
+                res["daily_df"].to_excel(writer, sheet_name='日度成本汇总')
+                res["df_impact"].to_excel(writer, sheet_name='电网冲击指标')
+            excel_data = output.getvalue()
+            
+            txt_content = f"V2G 仿真汇总\n{'='*30}\n"
+            for k, v in totals.items(): txt_content += f"{k} 总成本: {v:.2f} 元\n"
+            txt_content += f"\nA3-A4 纯 V2G 收益: {res['delta'][2]:.2f} 元\n"
+            
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                st.download_button(
+                    "📊 下载完整数据表 (Excel)", 
+                    data=excel_data, 
+                    file_name=f"V2G_仿真结果.xlsx", 
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+                    use_container_width=True, 
+                    type="primary"
+                )
+            with col_btn2:
+                st.download_button(
+                    "📄 下载汇总报告 (TXT)", 
+                    data=txt_content, 
+                    file_name=f"V2G_汇总报告.txt", 
+                    mime="text/plain", 
+                    use_container_width=True
+                )
