@@ -517,7 +517,7 @@ else:
                     st.plotly_chart(fig_bill, use_container_width=True)
                     st.success(f"✅ 橙色柱子减去绿色柱子，剩余的高度差就是每天真实掏的钱。仿真期间 V2G 卖电共为你赚回了 **{total_sell:.0f} 元**。")
 
-    # ---------- Tab 4: ⚡ 电网冲击分析 (终极精简直观版) ----------
+    # ---------- Tab 4: ⚡ 电网冲击分析 (全天候多维诊断版) ----------
     with tab_impact:
         with st.container(border=True):
             st.markdown("#### ⚡ 净负荷曲线对比 (削峰填谷效果)")
@@ -597,13 +597,12 @@ else:
             )
             st.plotly_chart(fig_impact, use_container_width=True)
 
-            # ★ 极简、客观的运维诊断与建议 (修复了 HTML 渲染乱码的终极专家系统)
+            # ★ 全天候多维诊断专家系统（完美修复乱码）
             st.markdown("#### 🧠 净负荷曲线深度诊断与调度建议")
             
-            # 先用一个字符串把所有内容完整拼接
-            advice_html = "<div class='advice-box'><h4>📊 曲线异常特征解析：</h4><ul>"
+            advice_html = "<div class='advice-box'><h4>📊 曲线异常特征全景解析：</h4><ul>"
             
-            # 1. 晚高峰削峰效果
+            # 1. 晚高峰削峰效果 (17:00-22:00)
             peak_hours = [17, 18, 19, 20, 21]
             net_a2_peak = df_day_impact[df_day_impact["Hour"].isin(peak_hours) & (df_day_impact["Scenario"] == "A2")]["Net_Load"].max()
             net_a4_peak = df_day_impact[df_day_impact["Hour"].isin(peak_hours) & (df_day_impact["Scenario"] == "A4")]["Net_Load"].max()
@@ -614,44 +613,52 @@ else:
             else:
                 advice_html += f"<li><b>⚠️ 晚高峰削峰失效：</b>A4 并未有效压制 17:00-22:00 的净负荷峰值（反而达到 {net_a4_peak:.0f} kW）。</li>"
                 
-            # 2. 平时段反送/过度套利
-            valley_hours = [0, 1, 2, 3, 4, 5, 12, 13, 14]
-            v_a1 = df_day_impact[df_day_impact["Hour"].isin(valley_hours) & (df_day_impact["Scenario"] == "A1")]["Net_Load"].mean()
-            v_a2 = df_day_impact[df_day_impact["Hour"].isin(valley_hours) & (df_day_impact["Scenario"] == "A2")]["Net_Load"].mean()
-            v_a4 = df_day_impact[df_day_impact["Hour"].isin(valley_hours) & (df_day_impact["Scenario"] == "A4")]["Net_Load"].mean()
+            # 2. 凌晨/早高峰过度套利 (0:00-8:00)
+            morning_hours = [0, 1, 2, 3, 4, 5, 6, 7]
+            v_a1_morn = df_day_impact[df_day_impact["Hour"].isin(morning_hours) & (df_day_impact["Scenario"] == "A1")]["Net_Load"].mean()
+            v_a4_morn = df_day_impact[df_day_impact["Hour"].isin(morning_hours) & (df_day_impact["Scenario"] == "A4")]["Net_Load"].mean()
             
-            if v_a4 > v_a2 * 1.05:
-                advice_html += f"<li><b>⚠️ 谷时段/平时段负荷反升（过度套利）：</b>在 0:00-6:00 及 12:00-15:00 期间，A4 的净负荷均值（{v_a4:.0f} kW）显著高于 A2（{v_a2:.0f} kW）甚至基础负荷（{v_a1:.0f} kW）。原因是 V2G 算法在低价时段集中大量充电囤电，导致微网购电激增，破坏了原有的谷时平稳性。</li>"
-            
-            # 3. 锯齿效应（高波动性）
+            # 检查该时段是否有异常凸起
+            if v_a4_morn > v_a1_morn * 1.15: 
+                advice_html += f"<li><b>⚠️ 凌晨/早高峰过度套利：</b>在 0:00-8:00 期间，A4 的平均净负荷（{v_a4_morn:.0f} kW）显著高于基础负荷（{v_a1_morn:.0f} kW）。图中可见明显的锯齿状凸起。这说明算法在低价时段集中充电囤电，反而推高了该时段的供电压力。</li>"
+
+            # 3. 下午平段过度充电 (12:00-16:00)
+            noon_hours = [12, 13, 14, 15]
+            v_a1_noon = df_day_impact[df_day_impact["Hour"].isin(noon_hours) & (df_day_impact["Scenario"] == "A1")]["Net_Load"].mean()
+            v_a4_noon = df_day_impact[df_day_impact["Hour"].isin(noon_hours) & (df_day_impact["Scenario"] == "A4")]["Net_Load"].mean()
+            if v_a4_noon > v_a1_noon * 1.1:
+                advice_html += f"<li><b>⚠️ 午后时段负荷抬升：</b>在 12:00-16:00 期间，A4 的净负荷均值高于基础负荷。算法可能在此平段继续激进充电，导致净负荷曲线不够平滑。</li>"
+
+            # 4. 整体锯齿化程度评估
             diff_a4 = df_day_impact[df_day_impact["Scenario"] == "A4"]["Net_Load"].diff().abs().mean()
             diff_a1 = df_day_impact[df_day_impact["Scenario"] == "A1"]["Net_Load"].diff().abs().mean()
+            
             if diff_a4 > diff_a1 * 1.5:
-                advice_html += f"<li><b>⚠️ 曲线锯齿化严重：</b>A4 的相邻时段功率变化率（爬坡率）为 {diff_a4:.0f} kW/半小时，远高于基础负荷的 {diff_a1:.0f} kW/半小时。图中可见在 8:00、15:00 等电价切换点，车辆充放电策略发生激变，对电网造成高频次冲击。</li>"
+                advice_html += f"<li><b>⚠️ 高频锯齿与功率激变：</b>A4 的相邻时段功率变化率（爬坡率）为 {diff_a4:.0f} kW/半小时，远高于基础负荷的 {diff_a1:.0f} kW/半小时。图中在 4点、6点、8点 等位置频繁出现陡升陡降的尖峰，对电网造成高频冲击。</li>"
 
-            # 4. A3 策略的隐患
+            # 5. A3 策略的隐患（早高峰新尖峰）
             net_a3_peak_morning = df_day_impact[df_day_impact["Hour"].isin([7,8,9]) & (df_day_impact["Scenario"] == "A3")]["Net_Load"].max()
             if net_a3_peak_morning > net_a2_peak * 0.95:
-                advice_html += f"<li><b>🔍 A3 策略的隐患：</b>A3 虽避开了晚高峰，但由于将充电负荷平移，在早高峰（7:00-9:00）形成了新的尖峰（达到 {net_a3_peak_morning:.0f} kW）。这证明单纯的“智能平移”未考虑电网整体承载力。</li>"
+                advice_html += f"<li><b>🔍 A3 策略的隐患：</b>A3 虽避开了晚高峰，但将负荷平移到早高峰，导致 7:00-9:00 出现了新的尖峰（达到 {net_a3_peak_morning:.0f} kW）。单纯平移无法解决整体承载力问题。</li>"
 
             advice_html += "</ul></div>"
             
-            # 一次性渲染，完美避免乱码
+            # 一次性渲染
             st.markdown(advice_html, unsafe_allow_html=True)
 
             # 运维指令/建议折叠面板
             with st.expander("🛠️ 调度指令与算法修正建议"):
                 st.markdown("""
-                **1. 抑制过度套利行为（平抑谷时凸起）**
-                *   **降低售电比例（套利系数）：** 将侧边栏的“售电比例”由 0.6 降至 0.3。削减 V2G 在低价时段的超额收益预期，强制减少谷时段的集中买电。
+                **1. 抑制过度套利行为（平抑凌晨/午后凸起）**
+                *   **降低售电比例（套利系数）：** 将侧边栏的“售电比例”由 0.6 降至 0.3。削减 V2G 在低价时段的超额收益预期，强制减少无效囤电导致的负荷激增。
                 
                 **2. 消除锯齿与高频冲击（约束爬坡率）**
                 *   **引入平滑惩罚（Smoothing Penalty）：** 在 MILP 目标函数中加入相邻时段功率差 \(\sum |P_{t} - P_{t-1}|\) 的惩罚项，限制车辆“满充满放”的激进行为。
-                *   **设定充放电爬坡率硬约束：** 限制 EV 和 BESS 在 0.5h 内的功率变化不得超过设定阈值（如 500kW/h）。
+                *   **设定充放电爬坡率硬约束：** 限制 EV 和 BESS 在 0.5h 内的功率变化不得超过设定阈值。
                 
                 **3. 宏观协同调度**
-                *   **扩大 EV 调度池（500+辆）：** 单个体量越小，总功率曲线越平滑，利用聚合效应消除毛刺。
-                *   **修正 A3 平移策略：** 智能充电不能仅避开晚高峰，需设定全天候的负荷上限（如不超过基础负荷的 1.1 倍）。
+                *   **扩大 EV 调度池（500+辆）：** 增加分布式储能基数，利用聚合效应抹平个体充放电行为的毛刺。
+                *   **修正 A3 平移策略：** 智能充电不能仅避开晚高峰，需设定全天候的负荷上限。
                 """)
                 
     # ---------- Tab 5: 收益分配 ----------
