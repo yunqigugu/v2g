@@ -19,7 +19,22 @@ custom_css = """
 <style>
     /* 1. 全局背景 */
     [data-testid="stAppViewContainer"] { background: radial-gradient(circle at 50% -20%, #112240 0%, #0A0F1A 60%); }
-    #MainMenu, footer, header {visibility: hidden;}
+    
+    /* ★ 修复侧边栏消失：仅隐藏主菜单和底部，顶部栏设为透明但保留按钮 */
+    #MainMenu, footer {visibility: hidden;}
+    header { background: rgba(0,0,0,0) !important; }
+    
+    /* ★ 强制高亮侧边栏展开按钮，再也丢不了 */
+    [data-testid="collapsedControl"] {
+        display: block !important;
+        visibility: visible !important;
+        color: #00E5FF !important;
+        background-color: #111827 !important;
+        border: 1px solid #00E5FF !important;
+        border-radius: 50% !important;
+        box-shadow: 0 0 10px rgba(0, 229, 255, 0.5) !important;
+        z-index: 9999;
+    }
 
     /* 2. 覆盖原生组件底色 */
     div[data-baseweb="select"] > div { background-color: rgba(17, 24, 39, 0.7) !important; border: 1px solid rgba(0, 229, 255, 0.3) !important; border-radius: 8px !important; color: #E2E8F0 !important; }
@@ -252,7 +267,7 @@ else:
         advice_html += "</ul></div>"
         st.markdown(advice_html, unsafe_allow_html=True)
 
-    # 3. 6个 Tabs 展示区（新增“电网冲击分析”）
+    # 3. 6个 Tabs 展示区
     tab1, tab2, tab3, tab_impact, tab4, tab5 = st.tabs(["📈 调度明细与趋势", "📉 边际效益分析", "📊 日度成本对比", "⚡ 电网冲击分析", "💰 收益分配", "💾 数据导出"])
 
     # ---------- Tab 1: 调度明细与趋势 ----------
@@ -509,17 +524,14 @@ else:
             st.markdown("#### ⚡ 各场景对电网净负荷的冲击指标对比")
             st.write("微网的净负荷 = 电网购电 - 电网售电。V2G 的核心物理价值就在于**削峰填谷**，平抑净负荷的剧烈波动，减轻对大电网的冲击。")
             
-            # 提取评估好的冲击指标 DataFrame
             df_impact = res["df_impact"].copy()
             
-            # 我们需要画图的指标：最大峰值、峰谷差、标准差
             impact_metrics = {
                 "peak_kw": "最大峰值负荷 (kW)",
                 "p2v_kw": "峰谷差 (kW)",
                 "std_kw": "负荷波动标准差 (kW)"
             }
             
-            # 绘制柱状图对比
             fig_impact = go.Figure()
             for i, (metric, title) in enumerate(impact_metrics.items()):
                 if metric in df_impact.columns:
