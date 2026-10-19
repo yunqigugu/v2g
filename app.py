@@ -114,14 +114,12 @@ with st.sidebar:
     st.markdown("---")
     run_btn = st.button("🚀 开始仿真计算", type="primary", use_container_width=True)
     
-    # ★ 调整位置：紧接着运行按钮放置“返回待机”按钮，只要出结果就必显示
     if st.session_state['sim_data'] is not None:
         if st.button("🔄 返回待机页面", use_container_width=True):
             st.session_state['sim_data'] = None
             st.session_state['view_index'] = -1
             st.rerun()
 
-    # ★ 历史快照查看区
     if st.session_state['history_snapshots']:
         st.markdown("<h2 class='sidebar-header'>🕰️ 3. 历史快照</h2>", unsafe_allow_html=True)
         
@@ -192,7 +190,6 @@ else:
         is_viewing_history = True
 
 if current_res is None:
-    # 待机状态
     standby_css = """<style>.v2g-hero{text-align:center;margin-top:-10px;margin-bottom:-15px;}.hero-title{font-size:3rem;font-weight:900;background:linear-gradient(90deg,#00E5FF,#00E676,#00E5FF);background-size:200%auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shine 3s linear infinite;margin-bottom:5px;}@keyframes shine{to{background-position:200%center;}}.hero-subtitle{color:#A0AEC0;font-size:1.1rem;letter-spacing:4px;margin-bottom:0px;}.topo-container{width:100%;max-width:750px;margin:0 auto;height:250px;margin-top:-20px;}.energy-line{stroke-dasharray:10 15;animation:flow 1s linear infinite;}@keyframes flow{to{stroke-dashoffset:-25;}}.glow-node{animation:pulse 2s ease-in-out infinite alternate;}@keyframes pulse{from{filter:drop-shadow(0 0 5px #00E5FF);}to{filter:drop-shadow(0 0 20px #00E676);}}.feature-card{background:rgba(17,24,39,0.6);border:1px solid rgba(0,229,255,0.2);border-radius:12px;padding:20px 20px;transition:all 0.3s ease;height:100%;}.feature-card:hover{transform:translateY(-5px);border-color:#00E5FF;box-shadow:0 10px 25px rgba(0,229,255,0.15);}.feature-icon{font-size:2.5rem;margin-bottom:12px;}.feature-title{color:#00E5FF;font-size:1.3rem;font-weight:bold;margin-bottom:10px;letter-spacing:1px;}.feature-desc{color:#A0AEC0;font-size:1.05rem;line-height:1.7;text-align:justify;}</style>"""
     st.markdown(standby_css, unsafe_allow_html=True)
     st.markdown("""<div class="v2g-hero"><h1 class="hero-title">Vehicle-to-Grid</h1><div class="hero-subtitle">重塑微网能源生态 · 让每一度电都有价值</div></div>""", unsafe_allow_html=True)
@@ -209,7 +206,6 @@ else:
     res = current_res
     totals = res["totals"]
     
-    # ★ 核心防翻车拦截，检测无解假数据
     is_infeasible = False
     if totals.get('A1', 0) == 0 and totals.get('A4', 0) == 0:
         is_infeasible = True
@@ -519,7 +515,7 @@ else:
                     st.plotly_chart(fig_bill, use_container_width=True)
                     st.success(f"✅ 橙色柱子减去绿色柱子，剩余的高度差就是每天真实掏的钱。仿真期间 V2G 卖电共为你赚回了 **{total_sell:.0f} 元**。")
 
-                 # ---------- Tab 4: ⚡ 电网冲击分析 (专业调度运维版) ----------
+                 # ---------- Tab 4: ⚡ 电网冲击分析 (终极精简直观版) ----------
     with tab_impact:
         with st.container(border=True):
             st.markdown("#### ⚡ 净负荷曲线对比 (削峰填谷效果)")
@@ -558,7 +554,6 @@ else:
 
             st.write("---")
             
-            # ★ 核心优化：使用垂直柱状图并截断 Y 轴，让微小差距无限放大
             st.markdown("#### 📊 冲击指标相对改善率 (以 A2 为 100% 基准)")
             st.write("图表 Y 轴已锁定在 **80%~110%** 区间，以便清晰对比微小的指标波动。柱子低于 100% 红线代表对电网有改善。")
             
@@ -594,36 +589,63 @@ else:
                 barmode='group',
                 template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 margin=dict(t=60, b=20, l=20, r=20),
-                yaxis=dict(title="相对冲击比例", gridcolor="rgba(255,255,255,0.05)", range=[80, 110]), # ★ Y轴截断，放大差距
+                yaxis=dict(title="相对冲击比例", gridcolor="rgba(255,255,255,0.05)", range=[80, 110]), 
                 xaxis=dict(title="调度场景"),
                 legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
             )
             st.plotly_chart(fig_impact, use_container_width=True)
 
-            # ★ 极简、客观的运维诊断与建议
-            st.markdown("#### 🧠 电网调度运维建议")
+            # ★ 极简、客观的运维诊断与建议 (多维动态专家系统)
+            st.markdown("#### 🧠 净负荷曲线深度诊断与调度建议")
             
-            p2v_a3 = df_impact.loc["A3", "p2v_kw"]
-            p2v_a4 = df_impact.loc["A4", "p2v_kw"]
+            st.markdown("<div class='advice-box'><h4>📊 曲线异常特征解析：</h4><ul>", unsafe_allow_html=True)
             
-            st.markdown("<div class='advice-box'>", unsafe_allow_html=True)
+            # 1. 晚高峰削峰效果
+            peak_hours = [17, 18, 19, 20, 21]
+            net_a2_peak = df_day_impact[df_day_impact["Hour"].isin(peak_hours) & (df_day_impact["Scenario"] == "A2")]["Net_Load"].max()
+            net_a4_peak = df_day_impact[df_day_impact["Hour"].isin(peak_hours) & (df_day_impact["Scenario"] == "A4")]["Net_Load"].max()
             
-            # 客观现象分析
-            if p2v_a4 <= p2v_a3:
-                st.markdown(f"- ✅ **削峰填谷效果显著：** 相比 A3 策略，A4（V2G）使微网的峰谷差进一步缩小了 **{(p2v_a3 - p2v_a4)/p2v_a3*100:.1f}%**，有效降低了变压器过载风险。")
+            if net_a4_peak < net_a2_peak:
+                reduction = (net_a2_peak - net_a4_peak) / net_a2_peak * 100
+                st.markdown(f"<li><b>✅ 晚高峰削峰有效：</b>A4 成功将 17:00-22:00 的净负荷峰值从 A2 的 {net_a2_peak:.0f} kW 压降至 {net_a4_peak:.0f} kW（降幅 {reduction:.1f}%），避免了变压器严重过载。</li>")
             else:
-                st.markdown(f"- ⚠️ **净负荷波动反噬：** 相比 A3 策略，A4（V2G）的峰谷差（{p2v_a4:.0f} kW）反而上升了。原因是算法为追求“低价充电、高价放电”的套利空间，在平时段过度集中买电，推高了净负荷峰值。")
-
-            # 运维建议折叠面板（专业口吻）
-            with st.expander("🛠️ 点击展开：调度策略调整与算法优化建议"):
-                st.markdown("""
-                **【实时调度参数调整】**
-                *   **降低售电价差（售电比例降至 0.3~0.4）：** 削减过度套利的利润空间，引导 EV 优先满足微网内部负荷，而非向大电网反送电，从而平滑净负荷曲线。
-                *   **扩大调度池（EV 数量提升至 500 辆以上）：** 增加分布式储能基数，利用聚合效应抹平个体充放电行为的毛刺。
+                st.markdown(f"<li><b>⚠️ 晚高峰削峰失效：</b>A4 并未有效压制 17:00-22:00 的净负荷峰值（反而达到 {net_a4_peak:.0f} kW）。</li>")
                 
-                **【底层控制算法优化】**
-                *   **引入“负荷波动平滑惩罚项”：** 目前的目标函数仅追求经济成本最低（MILP）。建议在目标函数中增加净负荷变化率的惩罚项（Smoothing Penalty），约束相邻时段的购售电功率差。
-                *   **增加充放电爬坡率约束：** 限制 EV 和 BESS 在单个时段内的功率突变量，强制设备平缓爬坡，彻底消除锯齿状波动。
+            # 2. 平时段反送/过度套利
+            valley_hours = [0, 1, 2, 3, 4, 5, 12, 13, 14]
+            v_a1 = df_day_impact[df_day_impact["Hour"].isin(valley_hours) & (df_day_impact["Scenario"] == "A1")]["Net_Load"].mean()
+            v_a2 = df_day_impact[df_day_impact["Hour"].isin(valley_hours) & (df_day_impact["Scenario"] == "A2")]["Net_Load"].mean()
+            v_a4 = df_day_impact[df_day_impact["Hour"].isin(valley_hours) & (df_day_impact["Scenario"] == "A4")]["Net_Load"].mean()
+            
+            if v_a4 > v_a2 * 1.05:
+                st.markdown(f"<li><b>⚠️ 谷时段/平时段负荷反升（过度套利）：</b>在 0:00-6:00 及 12:00-15:00 期间，A4 的净负荷均值（{v_a4:.0f} kW）显著高于 A2（{v_a2:.0f} kW）甚至基础负荷（{v_a1:.0f} kW）。原因是 V2G 算法在低价时段集中大量充电囤电，导致微网购电激增，破坏了原有的谷时平稳性。</li>")
+            
+            # 3. 锯齿效应（高波动性）
+            diff_a4 = df_day_impact[df_day_impact["Scenario"] == "A4"]["Net_Load"].diff().abs().mean()
+            diff_a1 = df_day_impact[df_day_impact["Scenario"] == "A1"]["Net_Load"].diff().abs().mean()
+            if diff_a4 > diff_a1 * 1.5:
+                st.markdown(f"<li><b>⚠️ 曲线锯齿化严重：</b>A4 的相邻时段功率变化率（爬坡率）为 {diff_a4:.0f} kW/半小时，远高于基础负荷的 {diff_a1:.0f} kW/半小时。图中可见在 8:00、15:00 等电价切换点，车辆充放电策略发生激变，对电网造成高频次冲击。</li>")
+
+            # 4. A3 策略的隐患
+            net_a3_peak_morning = df_day_impact[df_day_impact["Hour"].isin([7,8,9]) & (df_day_impact["Scenario"] == "A3")]["Net_Load"].max()
+            if net_a3_peak_morning > net_a2_peak * 0.95:
+                st.markdown(f"<li><b>🔍 A3 策略的隐患：</b>A3 虽避开了晚高峰，但由于将充电负荷平移，在早高峰（7:00-9:00）形成了新的尖峰（达到 {net_a3_peak_morning:.0f} kW）。这证明单纯的“智能平移”未考虑电网整体承载力。</li>")
+
+            st.markdown("</ul></div>", unsafe_allow_html=True)
+
+            # 运维指令/建议折叠面板
+            with st.expander("🛠️ 调度指令与算法修正建议"):
+                st.markdown("""
+                **1. 抑制过度套利行为（平抑谷时凸起）**
+                *   **降低售电比例（套利系数）：** 将侧边栏的“售电比例”由 0.6 降至 0.3。削减 V2G 在低价时段的超额收益预期，强制减少谷时段的集中买电。
+                
+                **2. 消除锯齿与高频冲击（约束爬坡率）**
+                *   **引入平滑惩罚（Smoothing Penalty）：** 在 MILP 目标函数中加入相邻时段功率差 \(\sum |P_{t} - P_{t-1}|\) 的惩罚项，限制车辆“满充满放”的激进行为。
+                *   **设定充放电爬坡率硬约束：** 限制 EV 和 BESS 在 0.5h 内的功率变化不得超过设定阈值（如 500kW/h）。
+                
+                **3. 宏观协同调度**
+                *   **扩大 EV 调度池（500+辆）：** 单个体量越小，总功率曲线越平滑，利用聚合效应消除毛刺。
+                *   **修正 A3 平移策略：** 智能充电不能仅避开晚高峰，需设定全天候的负荷上限（如不超过基础负荷的 1.1 倍）。
                 """)
                 
             st.markdown("</div>", unsafe_allow_html=True)
