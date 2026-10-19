@@ -544,13 +544,13 @@ else:
                     mode="lines", line=dict(color="rgba(255,255,255,0.2)", width=2, dash="dash")
                 ))
 
-            # A2 无序充电 (红色虚线)
+            # A2 无序充电 (红色实线)
             df_a2 = df_day_impact[df_day_impact["Scenario"] == "A2"]
             fig_net.add_trace(go.Scatter(
                 x=df_a2["Hour"], y=df_a2["Net_Load"],
                 name="A2: 无序充电 (最差)",
                 mode="lines",
-                line=dict(color="#FF4B4B", width=2, dash='dot')
+                line=dict(color="#FF4B4B", width=3, dash='solid')
             ))
 
             # A3 智能充电 (橙色虚线)
@@ -581,7 +581,7 @@ else:
                 margin=dict(l=20, r=20, t=50, b=20)
             )
             st.plotly_chart(fig_net, use_container_width=True)
-            st.info("💡 **解读：** 你可以直观看到，**红色虚线**的波峰极高，而 **青色粗实线** 把高峰期的净负荷压了下来，填平了低谷，这就是 V2G 的核心价值。")
+            st.info("💡 **解读：** 你可以直观看到，**红色实线**的波峰极高，而 **青色粗实线** 把高峰期的净负荷压了下来，填平了低谷，这就是 V2G 的核心价值。")
 
             st.write("---")
             st.markdown("#### 📊 冲击指标降低率 (以 A2 无序充电为基准)")
@@ -632,7 +632,7 @@ else:
             st.plotly_chart(fig_impact, use_container_width=True)
 
             # ★ 智能诊断分析
-            st.markdown("#### 🧠 冲击诊断建议")
+            st.markdown("#### 🧠 冲击诊断与平稳度优化建议")
             
             p2v_a2 = df_impact.loc["A2", "p2v_kw"]
             p2v_a3 = df_impact.loc["A3", "p2v_kw"]
@@ -645,8 +645,12 @@ else:
                 impact_advice += f"<li><b>✅ 削峰填谷成功：</b>相比 A3（智能充电），A4（V2G）使峰谷差进一步缩小了 <b>{reduction:.1f}%</b>。车辆在高峰放电、低谷充电，成功平抑了净负荷波动。</li>"
             else:
                 impact_advice += f"<li><b>⚠️ 异常诊断 (V2G反噬)：</b>你可能注意到了，图中的青色实线在平时段反而冲出了几个尖峰，导致 A4 的峰谷差（{p2v_a4:.0f} kW）甚至比 A3（{p2v_a3:.0f} kW）还要高！<br>"
-                impact_advice += f"<b>原因分析：</b>这是因为 V2G 在追求“低价充电、高价放电”套利时，可能在平时段为了囤电充得太猛，导致向大电网买电的峰值反而被推高了（即“反送电”变少了）。<br>"
-                impact_advice += f"<b>调整建议：</b>建议在左侧侧边栏适当调低“售电比例”或减少“EV数量”，引导调度算法不要过度追求套利，而是更平滑地贴合负荷曲线。</li>"
+                impact_advice += f"<b>原因分析：</b>这是因为 V2G 在追求“低价充电、高价放电”套利时，可能在平时段为了囤电充得太猛，导致向大电网买电的峰值反而被推高了。<br>"
+            
+            # 增加平稳度优化建议
+            impact_advice += f"<br><b>🛠️ 如何让电网更平稳（解决曲线锯齿）？</b>"
+            impact_advice += f"<br><b>实操建议（立竿见影）：</b>去左侧侧边栏把 <b>‘售电比例’</b> 从 0.6 降到 0.3 或 0.4，算法就不会那么激进地去‘囤电套利’，曲线会明显平滑很多。同时，把 <b>‘EV 数量’</b> 调到 500 辆以上，规模效应会平滑掉个体行为的毛刺。"
+            impact_advice += f"<br><b>技术升级（写进PPT里的高级货）：</b>如果在答辩时老师问起，你可以这样回答：<i>‘老师，目前的锯齿是因为 MILP 算法在追求绝对的经济最优，导致了过度套利。在未来的工程应用中，我会在目标函数中引入“负荷波动平滑惩罚项 (Smoothing Penalty)”，通过牺牲极小部分的套利收益，来换取电网的绝对平稳。’</i></li>"
                 
             impact_advice += "</ul></div>"
             st.markdown(impact_advice, unsafe_allow_html=True)
