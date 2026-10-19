@@ -7,6 +7,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import io
 import traceback
+from datetime import datetime
 
 from config import CONFIG
 from main import run_simulation
@@ -56,10 +57,14 @@ custom_css = """
 st.markdown(custom_css, unsafe_allow_html=True)
 st.markdown("<h1 class='main-title'>⚡ V2G 微网仿真与深度对比控制台</h1>", unsafe_allow_html=True)
 
+# ================= ★ 核心状态管理：历史快照 =================
 if 'sim_data' not in st.session_state:
     st.session_state['sim_data'] = None
+if 'history_snapshots' not in st.session_state:
+    st.session_state['history_snapshots'] = []  # 列表，用于存放历史快照
+if 'view_index' not in st.session_state:
+    st.session_state['view_index'] = -1  # -1 代表查看当前最新，>=0 代表查看历史
 
-# ================= ★ 核心升级：带缓存的仿真函数 =================
 @st.cache_data(show_spinner=False, max_entries=1)
 def run_simulation_cached(cfg_dict):
     res = run_simulation(copy.deepcopy(cfg_dict), export_files=False)
@@ -70,9 +75,7 @@ with st.sidebar:
     st.markdown("<h2 class='sidebar-header'>⚙️ 1. 核心参数配置</h2>", unsafe_allow_html=True)
     a_mode = st.radio("选择 A 组模型模式", options=[1, 2, 3, 4], format_func=lambda x: {1: "A1: 纯 BESS", 2: "A2: 无序充电", 3: "A3: 智能充电", 4: "A4: 纯 V2G"}[x], index=3)
     
-    # BESS 容量滑块
-    bess_cap = st.slider("BESS 容量 (kWh)", min_value=1000, max_value=20000, value=10800, step=1000, help="储能系统最大容量，直接影响微网的自主调节能力")
-    
+    bess_cap = st.slider("BESS 容量 (kWh)", min_value=1000, max_value=20000, value=10800, step=1000)
     n_ev = st.slider("EV 数量 (辆)", 10, 1500, 200, 10)
     n_days = st.slider("仿真天数 (天)", 1, 30, 5, 1)
     sell_ratio = st.slider("售电比例", 0.1, 1.0, 0.60, 0.05)
@@ -94,38 +97,68 @@ with st.sidebar:
     st.markdown("---")
     run_btn = st.button("🚀 开始仿真计算", type="primary", use_container_width=True)
     
+    # ★ 历史快照查看区
+    if st.session_state['history_snapshots']:
+        st.markdown("<h2 class='sidebar-header'>🕰️ 3. 历史快照</h2>", unsafe_allow_html=True)
+        
+        # 构建下拉菜单选项
+        snapshot_options = ["✨ 查看最新结果"]
+        for i, snap in enumerate(st.session_state['history_snapshots']):
+            # 提取摘要信息
+            info = snap["cfg_summary"]
+            label = f"{snap['time']} | EV: {info['n_ev']} | BESS: {info['bess_cap']} | A{info['a_mode']}"
+            snapshot_options.append(label)
+            
+        selected_snap = st.selectbox("选择要查看的历史记录：", options=range(-1, len(st.session_state['history_snapshots'])), format_func=lambda x: snapshot_options[x+1], index=st.session_state['view_index']+1)
+        
+        # 更新当前查看的索引
+        if selected_snap != st.session_state['view_index']:
+            st.session_state['view_index'] = selected_snap
+            st.rerun()
+            
+        if st.button("🗑️ 清空所有历史记录", use_container_width=True):
+            st.session_state['history_snapshots'] = []
+            st.session_state['view_index'] = -1
+            st.session_state['sim_data'] = None
+            st.rerun()
+
     if st.session_state['sim_data'] is not None:
         if st.button("🔄 返回待机页面", use_container_width=True):
             st.session_state['sim_data'] = None
+            st.session_state['view_index'] = -1
             st.rerun()
 
 # ================= 执行计算 =================
 if run_btn:
     cfg = copy.deepcopy(CONFIG)
-    
-    # 注入参数
     cfg.update({
-        "A": a_mode, 
-        "bess_e_max": bess_cap, 
-        "bess_e_min": bess_cap * 0.10, 
-        "bess_e0": bess_cap * 0.55,        
-        "bess_pc_max": bess_cap / 4.0,     
-        "bess_pd_max": bess_cap / 4.0,     
-        "n_ev": n_ev, 
-        "n_days": n_days, 
-        "sell_ratio": sell_ratio, 
-        "emergency_ratio": emergency_ratio, 
+        "A": a_mode, "bess_e_max": bess_cap, "bess_e_min": bess_cap * 0.10, "bess_e0": bess_cap * 0.55,        
+        "bess_pc_max": bess_cap / 4.0, "bess_pd_max": bess_cap / 4.0, "n_ev": n_ev, "n_days": n_days, 
+        "sell_ratio": sell_ratio, "emergency_ratio": emergency_ratio, 
         "B1_pv": b1, "B2_load": b2, "B3_price": b3, "B4_ev": b4, 
         "C1_rolling": c1, "C2_cvar": c2, "C3_degradation": c3, "C4_transformer": c4, "C5_dod": c5, 
         "mip_gap": 0.05, "solve_time_limit": 60
     })
     
-    with st.spinner(f"🧠 正在求解 (若参数未变，将秒出缓存结果)..."):
+    with st.spinner(f"🧠 正在求解..."):
         try:
             res = run_simulation_cached(cfg)
             res["used_sell_ratio"] = sell_ratio
             st.session_state['sim_data'] = res
-            st.success("✅ 仿真计算完成！")
+            st.session_state['view_index'] = -1  # 计算完成后默认看最新
+            
+            # ★ 保存到历史快照库
+            snapshot = {
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "cfg_summary": {"n_ev": n_ev, "bess_cap": bess_cap, "a_mode": a_mode, "n_days": n_days},
+                "res": res  # 直接存结果的引用（注意：如果是复杂对象，可能需要 deepcopy，但这里 res 包含 dataframe，直接存即可）
+            }
+            st.session_state['history_snapshots'].append(snapshot)
+            # 限制最多保存 5 个，防止内存撑爆
+            if len(st.session_state['history_snapshots']) > 5:
+                st.session_state['history_snapshots'].pop(0)
+                
+            st.success("✅ 仿真计算完成，已自动保存快照！")
         except Exception as e:
             st.error(f"❌ 仿真运行出错: {e}")
             st.code(traceback.format_exc()) 
@@ -135,7 +168,18 @@ FUTURE_COLORS = ["#00E5FF", "#00E676", "#7C4DFF", "#FF9100"]
 PLOTLY_TEMPLATE = "plotly_dark"
 SCENARIO_LABELS = {"A1": "A1: 纯 BESS", "A2": "A2: 无序充电", "A3": "A3: 智能充电", "A4": "A4: 纯 V2G"}
 
-if st.session_state['sim_data'] is None:
+# ★ 确定当前要展示哪个结果
+current_res = None
+is_viewing_history = False
+
+if st.session_state['view_index'] == -1:
+    current_res = st.session_state['sim_data']
+else:
+    if st.session_state['view_index'] < len(st.session_state['history_snapshots']):
+        current_res = st.session_state['history_snapshots'][st.session_state['view_index']]["res"]
+        is_viewing_history = True
+
+if current_res is None:
     # 待机状态
     standby_css = """<style>.v2g-hero{text-align:center;margin-top:-10px;margin-bottom:-15px;}.hero-title{font-size:3rem;font-weight:900;background:linear-gradient(90deg,#00E5FF,#00E676,#00E5FF);background-size:200%auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shine 3s linear infinite;margin-bottom:5px;}@keyframes shine{to{background-position:200%center;}}.hero-subtitle{color:#A0AEC0;font-size:1.1rem;letter-spacing:4px;margin-bottom:0px;}.topo-container{width:100%;max-width:750px;margin:0 auto;height:250px;margin-top:-20px;}.energy-line{stroke-dasharray:10 15;animation:flow 1s linear infinite;}@keyframes flow{to{stroke-dashoffset:-25;}}.glow-node{animation:pulse 2s ease-in-out infinite alternate;}@keyframes pulse{from{filter:drop-shadow(0 0 5px #00E5FF);}to{filter:drop-shadow(0 0 20px #00E676);}}.feature-card{background:rgba(17,24,39,0.6);border:1px solid rgba(0,229,255,0.2);border-radius:12px;padding:20px 20px;transition:all 0.3s ease;height:100%;}.feature-card:hover{transform:translateY(-5px);border-color:#00E5FF;box-shadow:0 10px 25px rgba(0,229,255,0.15);}.feature-icon{font-size:2.5rem;margin-bottom:12px;}.feature-title{color:#00E5FF;font-size:1.3rem;font-weight:bold;margin-bottom:10px;letter-spacing:1px;}.feature-desc{color:#A0AEC0;font-size:1.05rem;line-height:1.7;text-align:justify;}</style>"""
     st.markdown(standby_css, unsafe_allow_html=True)
@@ -150,9 +194,14 @@ if st.session_state['sim_data'] is None:
     st.markdown("""<div style="text-align: center; margin-top: 20px; color: #A0AEC0; font-size: 1rem; animation: pulse 2s infinite alternate;">👈 <b>请在左侧控制面板配置参数，启动仿真引擎</b></div>""", unsafe_allow_html=True)
 
 else:
-    res = st.session_state['sim_data']
+    res = current_res
     totals = res["totals"]
     
+    # ★ 历史视图提示横幅
+    if is_viewing_history:
+        snap_info = st.session_state['history_snapshots'][st.session_state['view_index']]
+        st.warning(f"🕰️ **当前正在查看历史快照**（保存时间: {snap_info['time']}，配置: EV {snap_info['cfg_summary']['n_ev']} 辆，BESS {snap_info['cfg_summary']['bess_cap']} kWh）。如需查看最新结果，请在左侧选择“✨ 查看最新结果”。")
+
     # 1. 顶部核心指标看板
     with st.container(border=True):
         st.markdown("### 📊 核心指标看板 (总成本对比)")
@@ -249,16 +298,20 @@ else:
             st.markdown("#### EV 规模对单车边际收益的影响")
             st.info("💡 **结论前置：** 随着参与调度的 EV 数量增加，**单车日均贡献的收益呈现明显的“边际效益递减”趋势**。且储能 (BESS) 容量越大，微网对 EV 的依赖越小，整体收益曲线会相应下移。")
             
+            # 因为历史快照里参数可能变过，我们需要从当前视图的参数中获取 n_ev 和 bess_cap
+            current_view_n_ev = st.session_state['history_snapshots'][st.session_state['view_index']]["cfg_summary"]["n_ev"] if is_viewing_history else n_ev
+            current_view_bess = st.session_state['history_snapshots'][st.session_state['view_index']]["cfg_summary"]["bess_cap"] if is_viewing_history else bess_cap
+
             current_total_gain = max(totals['A3'] - totals['A4'], 0)
             n_days_sim = res["daily_df"].shape[0] if ("daily_df" in res and not res["daily_df"].empty) else 1
             daily_gain = current_total_gain / max(n_days_sim, 1) 
             
-            n_ev_list = [max(10, int(n_ev * 0.25)), int(n_ev * 0.5), n_ev, int(n_ev * 1.5), int(n_ev * 2.0), int(n_ev * 3.0)]
+            n_ev_list = [max(10, int(current_view_n_ev * 0.25)), int(current_view_n_ev * 0.5), current_view_n_ev, int(current_view_n_ev * 1.5), int(current_view_n_ev * 2.0), int(current_view_n_ev * 3.0)]
             n_ev_list = sorted(list(set(n_ev_list))) 
             
             total_gains = []
             for n in n_ev_list:
-                gain = daily_gain * ((n / n_ev) ** 0.6) if n_ev > 0 else 0
+                gain = daily_gain * ((n / current_view_n_ev) ** 0.6) if current_view_n_ev > 0 else 0
                 total_gains.append(max(gain, 0)) 
                 
             per_ev_gains = [tg / n if n > 0 else 0 for tg, n in zip(total_gains, n_ev_list)]
@@ -271,11 +324,11 @@ else:
                 marker=dict(size=10, color='#00E5FF', line=dict(width=2, color='#0A0F1A'))
             ))
             
-            current_per_ev = per_ev_gains[n_ev_list.index(n_ev)] if n_ev in n_ev_list else per_ev_gains[2]
+            current_per_ev = per_ev_gains[n_ev_list.index(current_view_n_ev)] if current_view_n_ev in n_ev_list else per_ev_gains[2]
             
             fig_margin.add_vline(
-                x=n_ev, line_dash="dash", line_color="#FF9100", 
-                annotation_text=f"当前设定: {n_ev}辆", annotation_position="top right"
+                x=current_view_n_ev, line_dash="dash", line_color="#FF9100", 
+                annotation_text=f"当前设定: {current_view_n_ev}辆", annotation_position="top right"
             )
             
             fig_margin.update_layout(
@@ -287,14 +340,12 @@ else:
             )
             st.plotly_chart(fig_margin, use_container_width=True)
             
-            bess_cap_display = bess_cap
-            
             if current_per_ev < 1:
                 st.warning(f"⚠️ **运营建议**：当前 **V2G 并没有产生额外正收益**（可能因为电池折旧成本过高，或者 EV 规模太小）。建议调大 EV 规模或放宽放电限制。")
-            elif n_ev > n_ev_list[-2]: 
-                st.warning(f"⚠️ **运营建议**：当前设定 {n_ev} 辆 EV，单车日均收益已降至 **{current_per_ev:.1f} 元**。过大的车队规模会大幅增加聚合商的通信与调度成本。同时，当前微网 BESS 容量为 {bess_cap_display} kWh，储能已具备较强调节能力，再盲目增加 EV 会引发“无效内卷”。建议精准筛选高意愿车主参与。")
+            elif current_view_n_ev > n_ev_list[-2]: 
+                st.warning(f"⚠️ **运营建议**：当前设定 {current_view_n_ev} 辆 EV，单车日均收益已降至 **{current_per_ev:.1f} 元**。过大的车队规模会大幅增加聚合商的通信与调度成本。同时，当前微网 BESS 容量为 {current_view_bess} kWh，储能已具备较强调节能力，再盲目增加 EV 会引发“无效内卷”。建议精准筛选高意愿车主参与。")
             else:
-                st.success(f"✅ **运营建议**：当前设定 {n_ev} 辆 EV 处于边际效益较优的区间，单车日均收益约 **{current_per_ev:.1f} 元**。既能保证微网调节能力（补充 {bess_cap_display} kWh 的 BESS），又能让车主获得可观的收益。")
+                st.success(f"✅ **运营建议**：当前设定 {current_view_n_ev} 辆 EV 处于边际效益较优的区间，单车日均收益约 **{current_per_ev:.1f} 元**。既能保证微网调节能力（补充 {current_view_bess} kWh 的 BESS），又能让车主获得可观的收益。")
 
     # ---------- Tab 3: 日度成本对比 (柱状图 + 拆解) ----------
     with tab3:
