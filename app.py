@@ -59,10 +59,20 @@ st.markdown("<h1 class='main-title'>⚡ V2G 微网仿真与深度对比控制台
 if 'sim_data' not in st.session_state:
     st.session_state['sim_data'] = None
 
+# ================= ★ 核心升级：带缓存的仿真函数 =================
+@st.cache_data(show_spinner=False, max_entries=1)
+def run_simulation_cached(cfg_dict):
+    res = run_simulation(copy.deepcopy(cfg_dict), export_files=False)
+    return res
+
 # ================= 侧边栏 =================
 with st.sidebar:
     st.markdown("<h2 class='sidebar-header'>⚙️ 1. 核心参数配置</h2>", unsafe_allow_html=True)
     a_mode = st.radio("选择 A 组模型模式", options=[1, 2, 3, 4], format_func=lambda x: {1: "A1: 纯 BESS", 2: "A2: 无序充电", 3: "A3: 智能充电", 4: "A4: 纯 V2G"}[x], index=3)
+    
+    # ★ 新增：BESS 容量滑块
+    bess_cap = st.slider("BESS 容量 (kWh)", min_value=1000, max_value=20000, value=10800, step=1000, help="储能系统最大容量，直接影响微网的自主调节能力")
+    
     n_ev = st.slider("EV 数量 (辆)", 10, 1500, 200, 10)
     n_days = st.slider("仿真天数 (天)", 1, 30, 5, 1)
     sell_ratio = st.slider("售电比例", 0.1, 1.0, 0.60, 0.05)
@@ -92,10 +102,26 @@ with st.sidebar:
 # ================= 执行计算 =================
 if run_btn:
     cfg = copy.deepcopy(CONFIG)
-    cfg.update({"A": a_mode, "n_ev": n_ev, "n_days": n_days, "sell_ratio": sell_ratio, "emergency_ratio": emergency_ratio, "B1_pv": b1, "B2_load": b2, "B3_price": b3, "B4_ev": b4, "C1_rolling": c1, "C2_cvar": c2, "C3_degradation": c3, "C4_transformer": c4, "C5_dod": c5, "mip_gap": 0.05, "solve_time_limit": 60})
-    with st.spinner(f"🧠 正在求解..."):
+    
+    # ★ 将滑块参数注入 cfg
+    cfg.update({
+        "A": a_mode, 
+        "bess_e_max": bess_cap, 
+        "bess_e0": bess_cap * 0.55,        # 假设初始电量为 55%
+        "bess_pc_max": bess_cap / 4.0,     # 假设 4 小时充满
+        "bess_pd_max": bess_cap / 4.0,     # 假设 4 小时放完
+        "n_ev": n_ev, 
+        "n_days": n_days, 
+        "sell_ratio": sell_ratio, 
+        "emergency_ratio": emergency_ratio, 
+        "B1_pv": b1, "B2_load": b2, "B3_price": b3, "B4_ev": b4, 
+        "C1_rolling": c1, "C2_cvar": c2, "C3_degradation": c3, "C4_transformer": c4, "C5_dod": c5, 
+        "mip_gap": 0.05, "solve_time_limit": 60
+    })
+    
+    with st.spinner(f"🧠 正在求解 (若参数未变，将秒出缓存结果)..."):
         try:
-            res = run_simulation(copy.deepcopy(cfg), export_files=False)
+            res = run_simulation_cached(cfg)
             st.session_state['sim_data'] = res
             st.success("✅ 仿真计算完成！")
         except Exception as e:
@@ -108,7 +134,7 @@ PLOTLY_TEMPLATE = "plotly_dark"
 SCENARIO_LABELS = {"A1": "A1: 纯 BESS", "A2": "A2: 无序充电", "A3": "A3: 智能充电", "A4": "A4: 纯 V2G"}
 
 if st.session_state['sim_data'] is None:
-    # 待机状态（略，保持之前的紧凑炫酷版）
+    # 待机状态
     standby_css = """<style>.v2g-hero{text-align:center;margin-top:-10px;margin-bottom:-15px;}.hero-title{font-size:3rem;font-weight:900;background:linear-gradient(90deg,#00E5FF,#00E676,#00E5FF);background-size:200%auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shine 3s linear infinite;margin-bottom:5px;}@keyframes shine{to{background-position:200%center;}}.hero-subtitle{color:#A0AEC0;font-size:1.1rem;letter-spacing:4px;margin-bottom:0px;}.topo-container{width:100%;max-width:750px;margin:0 auto;height:250px;margin-top:-20px;}.energy-line{stroke-dasharray:10 15;animation:flow 1s linear infinite;}@keyframes flow{to{stroke-dashoffset:-25;}}.glow-node{animation:pulse 2s ease-in-out infinite alternate;}@keyframes pulse{from{filter:drop-shadow(0 0 5px #00E5FF);}to{filter:drop-shadow(0 0 20px #00E676);}}.feature-card{background:rgba(17,24,39,0.6);border:1px solid rgba(0,229,255,0.2);border-radius:12px;padding:20px 20px;transition:all 0.3s ease;height:100%;}.feature-card:hover{transform:translateY(-5px);border-color:#00E5FF;box-shadow:0 10px 25px rgba(0,229,255,0.15);}.feature-icon{font-size:2.5rem;margin-bottom:12px;}.feature-title{color:#00E5FF;font-size:1.3rem;font-weight:bold;margin-bottom:10px;letter-spacing:1px;}.feature-desc{color:#A0AEC0;font-size:1.05rem;line-height:1.7;text-align:justify;}</style>"""
     st.markdown(standby_css, unsafe_allow_html=True)
     st.markdown("""<div class="v2g-hero"><h1 class="hero-title">Vehicle-to-Grid</h1><div class="hero-subtitle">重塑微网能源生态 · 让每一度电都有价值</div></div>""", unsafe_allow_html=True)
@@ -125,37 +151,28 @@ else:
     res = st.session_state['sim_data']
     totals = res["totals"]
     
-    # 1. 顶部核心指标看板（增加对比维度说明）
+    # 1. 顶部核心指标看板
     with st.container(border=True):
         st.markdown("### 📊 核心指标看板 (总成本对比)")
         col1, col2, col3, col4 = st.columns(4)
         
-        # 计算差额
         delta_a3 = totals['A2'] - totals['A3']
         delta_a4 = totals['A3'] - totals['A4']
         
-        # 修改 delta 文本，明确与谁对比，并在成本下降时显示绿色 (inverse 表示负数显绿，正数显红)
         col1.metric("A1 纯 BESS", f"{totals['A1']:.0f} 元", help="微网仅有电池储能，EV不参与调度")
         col2.metric("A2 无序充电", f"{totals['A2']:.0f} 元", help="EV即插即充，负荷峰值极高")
-        col3.metric("A3 智能充电", f"{totals['A3']:.0f} 元", 
-                    delta=f"较A2降本 {delta_a3:.0f} 元" if delta_a3 >= 0 else f"较A2增加 {abs(delta_a3):.0f} 元", 
-                    delta_color="normal" if delta_a3 >= 0 else "inverse")
-        col4.metric("A4 纯 V2G", f"{totals['A4']:.0f} 元", 
-                    delta=f"较A3降本 {delta_a4:.0f} 元" if delta_a4 >= 0 else f"较A3增加 {abs(delta_a4):.0f} 元", 
-                    delta_color="normal" if delta_a4 >= 0 else "inverse")
+        col3.metric("A3 智能充电", f"{totals['A3']:.0f} 元", delta=f"较A2降本 {delta_a3:.0f} 元" if delta_a3 >= 0 else f"较A2增加 {abs(delta_a3):.0f} 元", delta_color="normal" if delta_a3 >= 0 else "inverse")
+        col4.metric("A4 纯 V2G", f"{totals['A4']:.0f} 元", delta=f"较A3降本 {delta_a4:.0f} 元" if delta_a4 >= 0 else f"较A3增加 {abs(delta_a4):.0f} 元", delta_color="normal" if delta_a4 >= 0 else "inverse")
 
     # 2. 智能决策与诊断模块
     with st.container(border=True):
         st.markdown("### 🧠 智能决策与诊断")
         
-        # 核心逻辑判断
         is_v2g_best = totals['A4'] <= totals['A3'] and totals['A4'] <= totals['A1']
         total_v2g_gain = totals['A3'] - totals['A4']
         
-        # 计算各种利用率指标
         ev_charge_total = res['df_timeseries'][res['df_timeseries']['Scenario'] == 'A4']['EV_Charge'].sum() * 0.5
         ev_discharge_total = res['df_timeseries'][res['df_timeseries']['Scenario'] == 'A4']['EV_Discharge'].sum() * 0.5
-        curtailed = res['df_timeseries'][res['df_timeseries']['Scenario'] == 'A4']['PV'].sum() * 0.5 - ev_charge_total - (res['totals']['A4'] / 1.0) # 粗略估算
         
         advice_html = "<div class='advice-box'><h4>💡 运行分析报告：</h4><ul>"
         
@@ -177,9 +194,8 @@ else:
         advice_html += "</ul></div>"
         st.markdown(advice_html, unsafe_allow_html=True)
 
-
-    # 3. Tabs 展示区
-    tab1, tab2, tab3 = st.tabs(["📈 调度明细与趋势", "📉 边际效益分析", "💾 数据与导出"])
+    # 3. 4个 Tabs 展示区
+    tab1, tab2, tab3, tab4 = st.tabs(["📈 调度明细与趋势", "📉 边际效益分析", "📊 日度成本对比", "💰 收益分配与导出"])
 
     # ---------- Tab 1: 调度明细与趋势 ----------
     with tab1:
@@ -196,23 +212,9 @@ else:
                 fig = go.Figure()
                 for i, col in enumerate(["A1", "A2", "A3", "A4"]):
                     if f"Cum_{col}" in df_daily.columns:
-                        fig.add_trace(go.Scatter(
-                            x=df_daily["Day"], y=df_daily[f"Cum_{col}"],
-                            name=SCENARIO_LABELS.get(col, col),
-                            mode="lines+markers",
-                            line=dict(color=FUTURE_COLORS[i], width=3),
-                            marker=dict(size=8)
-                        ))
+                        fig.add_trace(go.Scatter(x=df_daily["Day"], y=df_daily[f"Cum_{col}"], name=SCENARIO_LABELS.get(col, col), mode="lines+markers", line=dict(color=FUTURE_COLORS[i], width=3), marker=dict(size=8)))
                 
-                fig.update_layout(
-                    title="各场景累计总成本走势对比",
-                    template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    xaxis=dict(title="天数 (Day)", gridcolor="rgba(255,255,255,0.05)", dtick=max(1, len(df_daily)//10)),
-                    yaxis=dict(title="累计总成本 (元)", gridcolor="rgba(255,255,255,0.05)"),
-                    hovermode="x unified",
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-                    margin=dict(l=20, r=20, t=50, b=20)
-                )
+                fig.update_layout(title="各场景累计总成本走势对比", template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(title="天数 (Day)", gridcolor="rgba(255,255,255,0.05)", dtick=max(1, len(df_daily)//10)), yaxis=dict(title="累计总成本 (元)", gridcolor="rgba(255,255,255,0.05)"), hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(l=20, r=20, t=50, b=20))
                 st.plotly_chart(fig, use_container_width=True)
 
             else:
@@ -239,32 +241,26 @@ else:
                     fig.update_layout(title=f"Day {t_day} 功率与电价时序对比", template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=4), yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.05)"), yaxis2=dict(title="电价 (元/kWh)", overlaying="y", side="right", showgrid=False), hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), margin=dict(l=20, r=20, t=50, b=20))
                     st.plotly_chart(fig, use_container_width=True)
 
-           # ---------- Tab 2: 边际效益分析 ----------
+    # ---------- Tab 2: 边际效益分析 ----------
     with tab2:
         with st.container(border=True):
             st.markdown("#### EV 规模对单车边际收益的影响")
             st.info("💡 **结论前置：** 随着参与调度的 EV 数量增加，**单车日均贡献的收益呈现明显的“边际效益递减”趋势**。且储能 (BESS) 容量越大，微网对 EV 的依赖越小，整体收益曲线会相应下移。")
             
-            # 1. 安全获取当前真实的仿真数据
             current_total_gain = max(totals['A3'] - totals['A4'], 0)
-            # 直接从结果 dataframe 中获取跑了多少天，绝对不会报错
             n_days_sim = res["daily_df"].shape[0] if ("daily_df" in res and not res["daily_df"].empty) else 1
-            
             daily_gain = current_total_gain / max(n_days_sim, 1) 
             
-            # 2. 动态生成扫描点
             n_ev_list = [max(10, int(n_ev * 0.25)), int(n_ev * 0.5), n_ev, int(n_ev * 1.5), int(n_ev * 2.0), int(n_ev * 3.0)]
             n_ev_list = sorted(list(set(n_ev_list))) 
             
-            # 3. 构建边际效益模型
             total_gains = []
             for n in n_ev_list:
                 gain = daily_gain * ((n / n_ev) ** 0.6) if n_ev > 0 else 0
-                total_gains.append(max(gain, 0)) # 保证收益不会变成负数
+                total_gains.append(max(gain, 0)) 
                 
             per_ev_gains = [tg / n if n > 0 else 0 for tg, n in zip(total_gains, n_ev_list)]
             
-            # 4. 画图
             fig_margin = go.Figure()
             fig_margin.add_trace(go.Scatter(
                 x=n_ev_list, y=per_ev_gains, mode='lines+markers', 
@@ -273,7 +269,6 @@ else:
                 marker=dict(size=10, color='#00E5FF', line=dict(width=2, color='#0A0F1A'))
             ))
             
-            # 标记出当前侧边栏选中的 EV 数量
             current_per_ev = per_ev_gains[n_ev_list.index(n_ev)] if n_ev in n_ev_list else per_ev_gains[2]
             
             fig_margin.add_vline(
@@ -290,29 +285,117 @@ else:
             )
             st.plotly_chart(fig_margin, use_container_width=True)
             
-            # 5. 结合当前 BESS 容量进行智能建议 (安全获取 BESS 容量)
-            bess_cap = CONFIG.get("bess_e_max", 10800) 
+            bess_cap_display = CONFIG.get("bess_e_max", 10800) 
             
             if current_per_ev < 1:
                 st.warning(f"⚠️ **运营建议**：当前 **V2G 并没有产生额外正收益**（可能因为电池折旧成本过高，或者 EV 规模太小）。建议调大 EV 规模或放宽放电限制。")
             elif n_ev > n_ev_list[-2]: 
-                st.warning(f"⚠️ **运营建议**：当前设定 {n_ev} 辆 EV，单车日均收益已降至 **{current_per_ev:.1f} 元**。过大的车队规模会大幅增加聚合商的通信与调度成本。同时，当前微网 BESS 容量为 {bess_cap} kWh，储能已具备较强调节能力，再盲目增加 EV 会引发“无效内卷”。建议精准筛选高意愿车主参与。")
+                st.warning(f"⚠️ **运营建议**：当前设定 {n_ev} 辆 EV，单车日均收益已降至 **{current_per_ev:.1f} 元**。过大的车队规模会大幅增加聚合商的通信与调度成本。同时，当前微网 BESS 容量为 {bess_cap_display} kWh，储能已具备较强调节能力，再盲目增加 EV 会引发“无效内卷”。建议精准筛选高意愿车主参与。")
             else:
-                st.success(f"✅ **运营建议**：当前设定 {n_ev} 辆 EV 处于边际效益较优的区间，单车日均收益约 **{current_per_ev:.1f} 元**。既能保证微网调节能力（补充 {bess_cap} kWh 的 BESS），又能让车主获得可观的收益。")    # ---------- Tab 3: 数据与导出 ----------
+                st.success(f"✅ **运营建议**：当前设定 {n_ev} 辆 EV 处于边际效益较优的区间，单车日均收益约 **{current_per_ev:.1f} 元**。既能保证微网调节能力（补充 {bess_cap_display} kWh 的 BESS），又能让车主获得可观的收益。")
+
+    # ---------- Tab 3: 日度成本对比 (柱状图 + 拆解) ----------
     with tab3:
         with st.container(border=True):
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                res["df_timeseries"].to_excel(writer, sheet_name='48时段详细数据', index=False)
-                res["daily_df"].to_excel(writer, sheet_name='日度成本汇总')
-                res["df_impact"].to_excel(writer, sheet_name='电网冲击指标')
-            excel_data = output.getvalue()
-            txt_content = f"V2G 仿真汇总\n{'='*30}\n"
-            for k, v in totals.items(): txt_content += f"{k} 总成本: {v:.2f} 元\n"
-            txt_content += f"\nA3-A4 纯 V2G 收益: {res['delta'][2]:.2f} 元\n"
+            st.markdown("#### 📊 各场景日度运行总成本对比")
             
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
+            df_daily = res["daily_df"].copy().reset_index()
+            if "Day" not in df_daily.columns: 
+                df_daily = df_daily.rename(columns={df_daily.columns[0]: "Day"})
+            
+            valid_cols = [c for c in ["A1", "A2", "A3", "A4"] if c in df_daily.columns]
+            
+            # 1. 绘制并排柱状图
+            fig_daily = go.Figure()
+            for i, col in enumerate(valid_cols):
+                fig_daily.add_trace(go.Bar(
+                    x=df_daily["Day"], 
+                    y=df_daily[col], 
+                    name=SCENARIO_LABELS.get(col, col),
+                    marker_color=FUTURE_COLORS[i],
+                    text=df_daily[col].round(0),
+                    textposition='outside',
+                    textfont=dict(size=11, color='rgba(255,255,255,0.7)')
+                ))
+                
+            fig_daily.update_layout(
+                barmode='group', # 并排柱状图
+                template=PLOTLY_TEMPLATE, 
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)",
+                margin=dict(t=60, b=20, l=20, r=20),
+                xaxis=dict(title="天数 (Day)", gridcolor="rgba(255,255,255,0.05)", tickmode='linear', dtick=1),
+                yaxis=dict(title="日总成本 (元)", gridcolor="rgba(255,255,255,0.05)"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
+            )
+            st.plotly_chart(fig_daily, use_container_width=True)
+            
+            st.info("💡 **解读：** 柱子越低代表该策略在当天的成本控制越优秀。你可以通过切换左侧侧边栏的 BESS 容量，观察四个柱子的高度变化。")
+
+            # 2. 成本构成拆解 (以表现最优的 V2G 为例)
+            st.markdown("<br>#### 🔍 V2G (A4) 单日成本账单拆解", unsafe_allow_html=True)
+            st.write("因为 V2G 允许卖电，我们把它每天的账单拆开看。买电是支出（红色），卖电是收入（绿色），两者的差额就是最终的总成本。")
+            
+            # 提取 A4 场景的数据
+            df_a4 = res["df_timeseries"][res["df_timeseries"]["Scenario"] == "A4"].copy()
+            if not df_a4.empty:
+                # 计算每天的购电花费和售电收益
+                df_a4["Buy_Cost"] = df_a4["Grid_Buy"] * df_a4["Price"] * 0.5
+                # 注意：这里的 sell_ratio 对应侧边栏滑块的值
+                df_a4["Sell_Revenue"] = df_a4["Grid_Sell"] * df_a4["Price"] * cfg["sell_ratio"] * 0.5
+                
+                daily_bill = df_a4.groupby("Day")[["Buy_Cost", "Sell_Revenue"]].sum().reset_index()
+                
+                fig_bill = go.Figure()
+                # 买电支出
+                fig_bill.add_trace(go.Bar(
+                    x=daily_bill["Day"], y=daily_bill["Buy_Cost"], 
+                    name="向电网买电花费", marker_color="#FF9100" 
+                ))
+                # 卖电收益（用负数表示，画在横轴下方，视觉上抵消成本）
+                fig_bill.add_trace(go.Bar(
+                    x=daily_bill["Day"], y=-daily_bill["Sell_Revenue"], 
+                    name="向电网卖电赚钱", marker_color="#00E676"
+                ))
+                
+                fig_bill.update_layout(
+                    barmode='relative', # 相对堆叠，正负抵消
+                    template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    margin=dict(t=40, b=20, l=20, r=20),
+                    xaxis=dict(title="天数 (Day)", tickmode='linear', dtick=1, gridcolor="rgba(255,255,255,0.05)"),
+                    yaxis=dict(title="金额 (元)", gridcolor="rgba(255,255,255,0.05)"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+                )
+                st.plotly_chart(fig_bill, use_container_width=True)
+                
+                st.success("✅ **看懂了吗？** 橙色柱子（买电支出）减去绿色柱子（卖电收益），剩余的高度差就是你在 A4 场景下每天真实掏的钱。")
+
+    # ---------- Tab 4: 收益分配与导出 ----------
+    with tab4:
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            with st.container(border=True):
+                st.markdown("#### 💰 V2G 总收益分红")
+                share_df = res["share_df"].copy()
+                share_df["金额(元)"] = share_df["比例"] * res['total_gain']
+                fig_pie = px.pie(share_df, values='金额(元)', names='角色', title=f"总收益 {res['total_gain']:.0f} 元", color_discrete_sequence=FUTURE_COLORS, hole=0.5)
+                fig_pie.update_traces(textposition='inside', texttemplate='<b>%{label}</b><br>%{value:,.0f} 元<br>(%{percent})', textfont_size=14, marker=dict(line=dict(color='#0A0F1A', width=2)))
+                fig_pie.update_layout(template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=40, b=10, l=10, r=10), showlegend=False)
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+        with c2:
+            with st.container(border=True):
+                st.markdown("#### 📥 数据导出")
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    res["df_timeseries"].to_excel(writer, sheet_name='48时段详细数据', index=False)
+                    res["daily_df"].to_excel(writer, sheet_name='日度成本汇总')
+                    res["df_impact"].to_excel(writer, sheet_name='电网冲击指标')
+                excel_data = output.getvalue()
+                txt_content = f"V2G 仿真汇总\n{'='*30}\n"
+                for k, v in totals.items(): txt_content += f"{k} 总成本: {v:.2f} 元\n"
+                txt_content += f"\nA3-A4 纯 V2G 收益: {res['delta'][2]:.2f} 元\n"
+                
+                st.write("所有仿真详细数据和图表均可一键导出。")
                 st.download_button("📊 下载完整数据表 (Excel)", data=excel_data, file_name=f"V2G_仿真结果.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True, type="primary")
-            with col_btn2:
                 st.download_button("📄 下载汇总报告 (TXT)", data=txt_content, file_name=f"V2G_汇总报告.txt", mime="text/plain", use_container_width=True)
