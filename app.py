@@ -239,30 +239,28 @@ else:
                     fig.update_layout(title=f"Day {t_day} 功率与电价时序对比", template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=4), yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.05)"), yaxis2=dict(title="电价 (元/kWh)", overlaying="y", side="right", showgrid=False), hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), margin=dict(l=20, r=20, t=50, b=20))
                     st.plotly_chart(fig, use_container_width=True)
 
-       # ---------- Tab 2: 边际效益分析 ----------
+           # ---------- Tab 2: 边际效益分析 ----------
     with tab2:
         with st.container(border=True):
             st.markdown("#### EV 规模对单车边际收益的影响")
             st.info("💡 **结论前置：** 随着参与调度的 EV 数量增加，**单车日均贡献的收益呈现明显的“边际效益递减”趋势**。且储能 (BESS) 容量越大，微网对 EV 的依赖越小，整体收益曲线会相应下移。")
             
-            # 1. 获取当前真实的仿真数据
-            # 当前 A3 到 A4 的降本收益（总收益）
+            # 1. 安全获取当前真实的仿真数据
             current_total_gain = max(totals['A3'] - totals['A4'], 0)
-            n_days_sim = CONFIG.get("n_days", 1) if 'n_days' not in cfg else cfg['n_days'] # 获取仿真天数
-            daily_gain = current_total_gain / max(n_days_sim, 1) # 折算到单日总收益
+            # 直接从结果 dataframe 中获取跑了多少天，绝对不会报错
+            n_days_sim = res["daily_df"].shape[0] if ("daily_df" in res and not res["daily_df"].empty) else 1
             
-            # 2. 动态生成扫描点（模拟真实扫描逻辑）
-            # 设定几个扫描点：当前数量的 0.5倍, 1倍, 2倍, 4倍...
+            daily_gain = current_total_gain / max(n_days_sim, 1) 
+            
+            # 2. 动态生成扫描点
             n_ev_list = [max(10, int(n_ev * 0.25)), int(n_ev * 0.5), n_ev, int(n_ev * 1.5), int(n_ev * 2.0), int(n_ev * 3.0)]
-            n_ev_list = sorted(list(set(n_ev_list))) # 去重排序
+            n_ev_list = sorted(list(set(n_ev_list))) 
             
-            # 3. 构建边际效益模型（利用对数或幂函数拟合递减规律）
-            # 假设总收益随 EV 数量呈开方增长（典型的规模效应递减），以当前结果为锚点
-            # G(N) = G_current * (N / N_current) ^ 0.6  (0.6 是经验弹性系数)
+            # 3. 构建边际效益模型
             total_gains = []
             for n in n_ev_list:
-                gain = daily_gain * ((n / n_ev) ** 0.6)
-                total_gains.append(gain)
+                gain = daily_gain * ((n / n_ev) ** 0.6) if n_ev > 0 else 0
+                total_gains.append(max(gain, 0)) # 保证收益不会变成负数
                 
             per_ev_gains = [tg / n if n > 0 else 0 for tg, n in zip(total_gains, n_ev_list)]
             
@@ -292,16 +290,15 @@ else:
             )
             st.plotly_chart(fig_margin, use_container_width=True)
             
-            # 5. 结合当前 BESS 容量进行智能建议
-            bess_cap = CONFIG.get("bess_e_max", 10800) # 获取当前 BESS 容量
+            # 5. 结合当前 BESS 容量进行智能建议 (安全获取 BESS 容量)
+            bess_cap = CONFIG.get("bess_e_max", 10800) 
             
-            if current_per_ev < 5:
-                st.warning(f"⚠️ **运营建议**：当前设定的 {n_ev} 辆 EV 规模过小，无法形成有效的聚合效应。由于调度成本分摊，单车日均收益仅为 **{current_per_ev:.1f} 元**。建议将规模扩大至 200 辆以上。")
-            elif n_ev > n_ev_list[-2]: # 如果接近或超过最大扫描点
+            if current_per_ev < 1:
+                st.warning(f"⚠️ **运营建议**：当前 **V2G 并没有产生额外正收益**（可能因为电池折旧成本过高，或者 EV 规模太小）。建议调大 EV 规模或放宽放电限制。")
+            elif n_ev > n_ev_list[-2]: 
                 st.warning(f"⚠️ **运营建议**：当前设定 {n_ev} 辆 EV，单车日均收益已降至 **{current_per_ev:.1f} 元**。过大的车队规模会大幅增加聚合商的通信与调度成本。同时，当前微网 BESS 容量为 {bess_cap} kWh，储能已具备较强调节能力，再盲目增加 EV 会引发“无效内卷”。建议精准筛选高意愿车主参与。")
             else:
-                st.success(f"✅ **运营建议**：当前设定 {n_ev} 辆 EV 处于边际效益较优的区间，单车日均收益约 **{current_per_ev:.1f} 元**。既能保证微网调节能力（补充 {bess_cap} kWh 的 BESS），又能让车主获得可观的收益。")
-    # ---------- Tab 3: 数据与导出 ----------
+                st.success(f"✅ **运营建议**：当前设定 {n_ev} 辆 EV 处于边际效益较优的区间，单车日均收益约 **{current_per_ev:.1f} 元**。既能保证微网调节能力（补充 {bess_cap} kWh 的 BESS），又能让车主获得可观的收益。")    # ---------- Tab 3: 数据与导出 ----------
     with tab3:
         with st.container(border=True):
             output = io.BytesIO()
