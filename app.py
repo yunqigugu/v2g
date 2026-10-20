@@ -75,7 +75,14 @@ with st.sidebar:
     sell_ratio = st.slider("售电比例", 0.1, 1.0, 0.60, 0.05)
     emergency_ratio = st.slider("紧急购电惩罚倍数", 1.0, 10.0, 5.0, 0.5)
 
-    st.markdown("<h2 class='sidebar-header'>🚗 2. 车队结构与设备投资</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='sidebar-header'>📈 2. 商业与电网边界</h2>", unsafe_allow_html=True)
+    base_load_scale = st.slider("基础负荷缩放倍率", 0.5, 2.0, 1.0, 0.1, help="模拟微网负荷增大或减小")
+    pv_capacity_scale = st.slider("光伏装机缩放倍率", 0.5, 2.0, 1.0, 0.1, help="模拟光伏装机规模变化")
+    demand_charge_rate = st.number_input("需量电费 (元/kW·天)", min_value=0.0, max_value=100.0, value=10.0, step=1.0, help="按每天的最大净负荷收取的基本电费")
+    degradation_cost = st.number_input("V2G电池折损成本 (元/kWh)", min_value=0.0, max_value=1.0, value=0.20, step=0.05, help="每放出1度电，折算的电池寿命成本")
+    discount_rate = st.slider("投资折现率 (%)", 1.0, 15.0, 8.0, 0.5) / 100.0
+
+    st.markdown("<h2 class='sidebar-header'>🚗 3. 车队结构与设备投资</h2>", unsafe_allow_html=True)
     enable_ev_split = st.checkbox("开启车队分类模拟 (私家车 vs 运营车)", value=False)
     if enable_ev_split:
         ev_private_ratio = st.slider("私家车占比", 0.1, 1.0, 0.8, 0.1)
@@ -84,7 +91,7 @@ with st.sidebar:
         
     infra_cost = st.number_input("双向充电桩单辆改造成本 (元)", min_value=0, max_value=10000, value=2000, step=500)
 
-    st.markdown("<h2 class='sidebar-header'>🌤️ 3. 气象环境场景</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='sidebar-header'>🌤️ 4. 气象环境场景</h2>", unsafe_allow_html=True)
     weather_scene = st.selectbox(
         "选择影响光伏出力的天气条件：",
         options=["☀️ 风和日丽 (基准)", "⛅ 多云转阴 (光照波动)", "🌧️ 狂风暴雨 (极低光照)", "❄️ 覆雪/雾霾 (几乎无光)"],
@@ -93,7 +100,7 @@ with st.sidebar:
     weather_map = {"☀️ 风和日丽 (基准)": 1.0, "⛅ 多云转阴 (光照波动)": 0.6, "🌧️ 狂风暴雨 (极低光照)": 0.2, "❄️ 覆雪/雾霾 (几乎无光)": 0.05}
     current_pv_scale = weather_map[weather_scene]
 
-    st.markdown("<h2 class='sidebar-header'>🧩 4. 附加模块叠加</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='sidebar-header'>🧩 5. 附加模块叠加</h2>", unsafe_allow_html=True)
     with st.expander("B 组：不确定性叠加"):
         b1 = st.checkbox("B1: 光伏不确定性", value=CONFIG["B1_pv"])
         b2 = st.checkbox("B2: 负荷不确定性", value=CONFIG["B2_load"])
@@ -116,7 +123,7 @@ with st.sidebar:
             st.rerun()
 
     if st.session_state['history_snapshots']:
-        st.markdown("<h2 class='sidebar-header'>🕰️ 5. 历史快照</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 class='sidebar-header'>🕰️ 6. 历史快照</h2>", unsafe_allow_html=True)
         snapshot_options = ["✨ 查看最新结果"]
         for i, snap in enumerate(st.session_state['history_snapshots']):
             info = snap["cfg_summary"]
@@ -142,7 +149,7 @@ if run_btn:
         "A": a_mode, "bess_e_max": bess_cap, "bess_e_min": bess_cap * 0.10, "bess_e0": bess_cap * 0.55,        
         "bess_pc_max": bess_cap / 4.0, "bess_pd_max": bess_cap / 4.0, "n_ev": n_ev, "n_days": n_days, 
         "sell_ratio": sell_ratio, "emergency_ratio": emergency_ratio, 
-        "pv_scale": current_pv_scale, 
+        "pv_scale": current_pv_scale, "base_load_scale": base_load_scale, "pv_capacity_scale": pv_capacity_scale,
         "enable_ev_split": enable_ev_split, 
         "ev_private_ratio": ev_private_ratio,
         "B1_pv": b1, "B2_load": b2, "B3_price": b3, "B4_ev": b4, 
@@ -176,6 +183,32 @@ if run_btn:
             res["used_sell_ratio"] = sell_ratio
             res["used_infra_cost"] = infra_cost
             res["used_enable_split"] = enable_ev_split
+            
+            # ================= ★ 商业后处理：附加需量电费 & 电池折损 =================
+            df_ts = res["df_timeseries"]
+            daily_peaks = df_ts.groupby(['Day', 'Scenario'])['Grid_Buy'].max().unstack()
+            daily_df = res["daily_df"]
+            
+            # 计算各场景每天的需量电费
+            for scen in ["A1", "A2", "A3", "A4"]:
+                if scen in daily_peaks.columns:
+                    daily_df[f"{scen}_DemandCost"] = daily_peaks[scen] * demand_charge_rate
+                    daily_df[scen] += daily_df[f"{scen}_DemandCost"]
+                    if scen in res["totals"]:
+                        res["totals"][scen] += daily_df[f"{scen}_DemandCost"].sum()
+                        
+            # 计算 V2G (A4) 电池折损成本
+            df_a4 = df_ts[df_ts["Scenario"] == "A4"]
+            total_ev_discharge = (df_a4["EV_Discharge"].sum() * 0.5)
+            ev_degradation_total = total_ev_discharge * degradation_cost
+            if "A4" in res["totals"]:
+                res["totals"]["A4"] += ev_degradation_total
+            if "A4" in daily_df.columns:
+                # 简化处理：将总折损分摊到每天
+                daily_df["A4"] += (ev_degradation_total / max(len(daily_df), 1))
+                
+            res["ev_degradation_total"] = ev_degradation_total
+            
             st.session_state['sim_data'] = res
             st.session_state['view_index'] = -1
             
@@ -246,40 +279,43 @@ else:
         col3.metric("A3 智能充电", f"{totals['A3']:.0f} 元", delta=f"较A2降本 {delta_a3:.0f} 元" if delta_a3 >= 0 else f"较A2增加 {abs(delta_a3):.0f} 元", delta_color="normal" if delta_a3 >= 0 else "inverse")
         col4.metric("A4 纯 V2G", f"{totals['A4']:.0f} 元", delta=f"较A3降本 {delta_a4:.0f} 元" if delta_a4 >= 0 else f"较A3增加 {abs(delta_a4):.0f} 元", delta_color="normal" if delta_a4 >= 0 else "inverse")
 
-    # 2. 智能决策与诊断模块
-    with st.container(border=True):
-        st.markdown("### 🧠 智能决策与诊断")
+    # 2. 智能决策与诊断模块 (改为可折叠)
+    with st.expander("📋 查看 AI 运行诊断与投资建议报告", expanded=False):
         is_v2g_best = totals['A4'] <= totals['A3'] and totals['A4'] <= totals['A1']
         total_v2g_gain = totals['A3'] - totals['A4']
         
-        # 计算投资回收期 (针对A4场景) -> 纯靠V2G套利赚回双向桩改造成本
+        # 计算投资回收期
         total_infra_cost = n_ev * res.get("used_infra_cost", 2000)
         n_days_sim = res["daily_df"].shape[0] if ("daily_df" in res and not res["daily_df"].empty) else 1
         daily_net_gain = max(total_v2g_gain / n_days_sim, 0.1) 
-        payback_days = total_infra_cost / daily_net_gain if daily_net_gain > 0 else 9999
         
-        advice_html = "<div class='advice-box'><h4>💡 运行分析报告：</h4><ul>"
+        # 动态回收期 (考虑折现)
+        annual_gain = daily_net_gain * 365
+        dynamic_payback = total_infra_cost / (annual_gain * (1 - discount_rate)) if annual_gain > 0 else 9999
+        
+        advice_html = "<div class='advice-box'><h4>💡 真实商业环境运行分析报告：</h4><ul>"
         if is_v2g_best:
             advice_html += f"<li><b>策略最优性：</b>当前配置下，<b>A4 纯 V2G 策略总成本最低</b>，相比智能充电 (A3) 节省了 <b>{total_v2g_gain:.0f} 元</b>。</li>"
         else:
             advice_html += f"<li><b>策略警告：</b>当前 A4 V2G 并非最优！建议增加 EV 规模或提高售电比例。</li>"
         
-        # 投资回收期输出
         if res.get("used_enable_split", False):
             advice_html += f"<li><b>车队分类：</b>检测到开启了车队分类模拟，私家车占主导的分布将导致放电深度受限。</li>"
         
-        if payback_days < 365:
-            advice_html += f"<li><b>💰 投资回报测算：</b>按单桩改造成本 {res.get('used_infra_cost', 2000)} 元计算，预计 <b>{payback_days:.0f} 天</b> 即可收回设备投资！（年化收益极佳）</li>"
-        elif payback_days < 3650:
-            advice_html += f"<li><b>💰 投资回报测算：</b>按单桩改造成本 {res.get('used_infra_cost', 2000)} 元计算，预计 <b>{payback_days/365:.1f} 年</b> 可收回投资。</li>"
+        if dynamic_payback < 365:
+            advice_html += f"<li><b>💰 动态投资回报（含 {discount_rate*100}% 折现）：</b>按单桩改造成本 {res.get('used_infra_cost', 2000)} 元计算，预计 <b>{dynamic_payback:.0f} 天</b> 即可收回设备投资。</li>"
+        elif dynamic_payback < 3650:
+            advice_html += f"<li><b>💰 动态投资回报（含 {discount_rate*100}% 折现）：</b>按单桩改造成本 {res.get('used_infra_cost', 2000)} 元计算，预计 <b>{dynamic_payback/365:.1f} 年</b> 可收回投资。</li>"
         else:
-            advice_html += f"<li><b>🚨 投资回报预警：</b>当前调度策略下，套利日收益极低，双向设备投资可能需要 <b>10年以上</b> 才能回收。建议优先推广低成本的单向有序充电。</li>"
+            advice_html += f"<li><b>🚨 投资回报预警：</b>动态回收期超过 10 年。建议优先推广低成本的单向有序充电，暂缓 V2G 改造。</li>"
             
+        advice_html += f"<li><b>🔋 电池寿命折损说明：</b>本次仿真 V2G 放电共计 <b>{res.get('ev_degradation_total', 0)/degradation_cost:.0f} kWh</b>，按 {degradation_cost} 元/kWh 折损计，已扣除电池寿命成本 <b>{res.get('ev_degradation_total', 0):.0f} 元</b>。</li>"
+        advice_html += f"<li><b>📉 需量电费影响：</b>需量单价设定为 {demand_charge_rate} 元/kW·天。A4 因削峰填谷，成功避免了因峰值过高导致的额外惩罚。</li>"
         advice_html += "</ul></div>"
         st.markdown(advice_html, unsafe_allow_html=True)
 
     # 3. 6个 Tabs 展示区
-    tab1, tab2, tab3, tab_impact, tab4, tab5 = st.tabs(["📈 调度明细与趋势", "📉 边际效益分析", "📊 日度成本对比", "⚡ 电网冲击分析", "💰 收益分配与投资", "💾 数据导出"])
+    tab1, tab2, tab3, tab_impact, tab4, tab5 = st.tabs(["📈 调度明细与趋势", "📉 边际效益分析", "📊 日度成本与账单拆解", "⚡ 电网冲击分析", "💰 收益分配与投资", "💾 数据导出"])
 
     # ---------- Tab 1: 调度明细与趋势 ----------
     with tab1:
@@ -337,28 +373,19 @@ else:
                 else:
                     fig.add_trace(go.Scatter(x=[], y=[], name="电价 (元/kWh)", yaxis="y2", showlegend=False))
 
-                # 图例移至底部，增加底部边距 b=100
                 fig.update_layout(
                     title=f"Day {t_day} 功率与电价时序对比 | 天气: {weather_scene}", 
-                    template=PLOTLY_TEMPLATE, 
-                    paper_bgcolor="rgba(0,0,0,0)", 
-                    plot_bgcolor="rgba(0,0,0,0)", 
+                    template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
                     xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=4), 
                     yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.05)"), 
                     yaxis2=dict(title="电价 (元/kWh)", overlaying="y", side="right", showgrid=False), 
                     hovermode="x unified", 
-                    legend=dict(
-                        orientation="h", 
-                        yanchor="top", 
-                        y=-0.25, 
-                        xanchor="center", 
-                        x=0.5
-                    ), 
+                    legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5), 
                     margin=dict(l=20, r=20, t=50, b=100) 
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
-                # ================= ★ 动态图表诊断分析 =================
+                # ★ 动态图表诊断分析
                 df_a3 = df_day[df_day["Scenario"] == "A3"]
                 df_a4 = df_day[df_day["Scenario"] == "A4"]
                 ev_dis_a4 = df_a4["EV_Discharge"].sum() * 0.5 if not df_a4.empty else 0
@@ -368,28 +395,22 @@ else:
                 diagnoses = []
                 suggestions = []
                 
-                # 1. 套利行为诊断
                 if "EV_Discharge" in y_cols:
                     if ev_dis_a4 > 10:
                         ratio = peak_dis_a4 / ev_dis_a4 * 100 if ev_dis_a4 > 0 else 0
                         diagnoses.append(f"<b>套利行为分析：</b>EV 在电价高峰时段累计放电 <b>{peak_dis_a4:.0f} kWh</b>，占全天放电量的 {ratio:.0f}%，成功捕捉高价差。")
-                        if ratio > 60:
-                            suggestions.append("放电高度集中在晚高峰，符合峰谷套利目标，当前售电参数设置合理，可继续保持。")
-                        else:
-                            suggestions.append("虽然产生了放电，但未完全集中在最高价时段。建议检查是否受限于车辆离站时间（EV行为限制）或变压器容量限制（C4）。")
+                        if ratio > 60: suggestions.append("放电高度集中在晚高峰，符合峰谷套利目标，当前售电参数设置合理，可继续保持。")
+                        else: suggestions.append("虽然产生了放电，但未完全集中在最高价时段。建议检查是否受限于车辆离站时间（EV行为限制）或变压器容量限制（C4）。")
                     else:
                         diagnoses.append(f"<b>套利行为分析：</b>当前单日 EV 放电量极低（仅 {ev_dis_a4:.0f} kWh）。")
                         suggestions.append("EV放电意愿极低！建议去左侧将“售电比例”拉高（如0.8以上），或检查是否开启了过严的电池折旧限制（C3）和放电深度限制（C5）。")
 
-                # 2. 填谷行为诊断
                 if "EV_Charge" in y_cols:
-                    if valley_chg_a4 > 10:
-                        diagnoses.append(f"<b>填谷行为分析：</b>EV 在凌晨低谷时段累计充电 <b>{valley_chg_a4:.0f} kWh</b>，有效利用了低价电。")
+                    if valley_chg_a4 > 10: diagnoses.append(f"<b>填谷行为分析：</b>EV 在凌晨低谷时段累计充电 <b>{valley_chg_a4:.0f} kWh</b>，有效利用了低价电。")
                     else:
                         diagnoses.append(f"<b>填谷行为分析：</b>EV 在凌晨低谷时段充电量较少。")
                         suggestions.append("若系统缺电，建议引导车辆在谷价时段（凌晨）充电，避免在平段或峰段充电抬高净负荷。")
 
-                # 3. 策略对比诊断
                 if "A3" in t_scens and "A4" in t_scens and ("EV_Discharge" in y_cols or "EV_Charge" in y_cols):
                     ev_dis_a3 = df_a3["EV_Discharge"].sum() * 0.5 if not df_a3.empty else 0
                     if ev_dis_a4 > ev_dis_a3 + 10:
@@ -399,25 +420,17 @@ else:
                         diagnoses.append(f"<b>策略对比受限：</b>A4 的反向放电量并未明显高于 A3。")
                         suggestions.append("当前 V2G 效果不显，可能是系统本身并不缺电。建议减少 BESS 规模，或降低光伏出力（如选择阴雨天气），以凸显 V2G 的应急价值。")
 
-                # 4. 兜底建议
                 if not diagnoses:
                     diagnoses.append("当前勾选的指标较少，未能触发深度运行特征诊断。")
                     suggestions.append("建议在上方“叠加指标”中同时勾选 **“电价”**、**“EV充电”** 和 **“EV放电”**，以便系统为你提供更详尽的套利分析建议。")
 
-                # 组装 HTML
-                diagnosis_html = "<div class='advice-box'><h4>🔍 单日图表智能诊断：</h4>"
-                diagnosis_html += "<ul>"
-                for d in diagnoses:
-                    diagnosis_html += f"<li>{d}</li>"
+                diagnosis_html = "<div class='advice-box'><h4>🔍 单日图表智能诊断：</h4><ul>"
+                for d in diagnoses: diagnosis_html += f"<li>{d}</li>"
                 diagnosis_html += "</ul>"
-                
                 if suggestions:
-                    diagnosis_html += "<div class='suggestion-title'>💡 行动建议：</div>"
-                    diagnosis_html += "<ul>"
-                    for s in suggestions:
-                        diagnosis_html += f"<li>{s}</li>"
+                    diagnosis_html += "<div class='suggestion-title'>💡 行动建议：</div><ul>"
+                    for s in suggestions: diagnosis_html += f"<li>{s}</li>"
                     diagnosis_html += "</ul>"
-                
                 diagnosis_html += "</div>"
                 st.markdown(diagnosis_html, unsafe_allow_html=True)
 
@@ -465,10 +478,10 @@ else:
             else:
                 st.success(f"✅ **运营建议**：当前设定 {current_view_n_ev} 辆 EV 处于边际效益较优的区间，单车日均收益约 **{current_per_ev:.1f} 元**。")
 
-    # ---------- Tab 3: 日度成本对比 ----------
+    # ---------- Tab 3: 日度成本与账单拆解 ----------
     with tab3:
         with st.container(border=True):
-            st.markdown("#### 📊 各场景日度运行总成本对比")
+            st.markdown("#### 📊 各场景日度运行总成本对比 (含需量电费与折旧)")
             df_daily = res["daily_df"].copy().reset_index()
             if "Day" not in df_daily.columns: df_daily = df_daily.rename(columns={df_daily.columns[0]: "Day"})
             valid_cols = [c for c in ["A1", "A2", "A3", "A4"] if c in df_daily.columns]
@@ -479,23 +492,42 @@ else:
             st.plotly_chart(fig_daily, use_container_width=True)
 
             st.write("---") 
-            st.subheader("🔍 V2G (A4) 单日成本账单拆解")
+            st.subheader("🔍 V2G (A4) 单日真实账单瀑布拆解")
             df_a4 = res["df_timeseries"][res["df_timeseries"]["Scenario"] == "A4"].copy()
             if not df_a4.empty:
                 sell_ratio_used = res.get("used_sell_ratio", 0.60)
                 df_a4["Buy_Cost"] = df_a4["Grid_Buy"] * df_a4["Price"] * 0.5
                 df_a4["Sell_Revenue"] = df_a4["Grid_Sell"] * df_a4["Price"] * sell_ratio_used * 0.5
-                daily_bill = df_a4.groupby("Day")[["Buy_Cost", "Sell_Revenue"]].sum().reset_index()
-                total_sell = daily_bill["Sell_Revenue"].sum()
-                if total_sell < 1.0:
-                    st.info("💡 **提示**：当前微网处于极度缺电状态，V2G车辆主要通过“削峰填谷”减少买电，并未产生多余电量向电网售电。")
-                else:
-                    fig_bill = go.Figure()
-                    fig_bill.add_trace(go.Bar(x=daily_bill["Day"], y=daily_bill["Buy_Cost"], name="向电网买电花费", marker_color="#FF9100"))
-                    fig_bill.add_trace(go.Bar(x=daily_bill["Day"], y=-daily_bill["Sell_Revenue"], name="向电网卖电赚钱", marker_color="#00E676"))
-                    fig_bill.update_layout(barmode='relative', template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=40, b=20, l=20, r=20), xaxis=dict(title="天数 (Day)", tickmode='linear', dtick=1, gridcolor="rgba(255,255,255,0.05)"), yaxis=dict(title="金额 (元)", gridcolor="rgba(255,255,255,0.05)"), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5))
-                    st.plotly_chart(fig_bill, use_container_width=True)
-                    st.success(f"✅ 橙色柱子减去绿色柱子，剩余的高度差就是每天真实掏的钱。仿真期间 V2G 卖电共为你赚回了 **{total_sell:.0f} 元**。")
+                
+                total_buy = df_a4["Buy_Cost"].sum()
+                total_sell = df_a4["Sell_Revenue"].sum()
+                total_demand = res["daily_df"]["A4_DemandCost"].sum() if "A4_DemandCost" in res["daily_df"] else 0
+                total_degr = res.get("ev_degradation_total", 0)
+                net_cost = total_buy - total_sell + total_demand + total_degr
+
+                # 瀑布图
+                fig_waterfall = go.Figure(go.Waterfall(
+                    name="V2G账单", orientation="v",
+                    measure=["relative", "relative", "relative", "relative", "total"],
+                    x=["电网买电花费", "V2G卖电收入", "需量电费(基本费)", "电池寿命折损", "最终真实净支出"],
+                    y=[total_buy, -total_sell, total_demand, total_degr, net_cost],
+                    text=[f"-{total_buy:.0f}", f"+{total_sell:.0f}", f"-{total_demand:.0f}", f"-{total_degr:.0f}", f"{net_cost:.0f}"],
+                    textposition="outside",
+                    connector={"line": {"color": "rgb(63, 63, 63)"}},
+                    decreasing={"marker": {"color": "#00E676"}},
+                    increasing={"marker": {"color": "#FF4B4B"}},
+                    totals={"marker": {"color": "#00E5FF"}}
+                ))
+                fig_waterfall.update_layout(
+                    title="仿真期间 V2G (A4) 财务账单拆解 (越低越好)",
+                    template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
+                    margin=dict(t=60, b=20, l=20, r=20), 
+                    yaxis=dict(title="金额 (元)", gridcolor="rgba(255,255,255,0.05)"),
+                    xaxis=dict(title="财务科目"),
+                    showlegend=False
+                )
+                st.plotly_chart(fig_waterfall, use_container_width=True)
+                st.info(f"💡 **商业拆解**：虽然 V2G 卖电赚了 {total_sell:.0f} 元，但不可忽视的是，设备需要交 {total_demand:.0f} 元的需量基本电费，且放电透支了 {total_degr:.0f} 元的电池寿命。最终系统真实掏出去的钱是 **{net_cost:.0f} 元**。")
 
     # ---------- Tab 4: ⚡ 电网冲击分析 ----------
     with tab_impact:
@@ -606,14 +638,14 @@ else:
             total_infra = n_ev * res.get("used_infra_cost", 2000)
             c_kpi1, c_kpi2, c_kpi3 = st.columns(3)
             c_kpi1.metric("双向设备总改造成本", f"{total_infra:.0f} 元")
-            c_kpi2.metric("日均 V2G 套利净收益", f"{daily_net_gain:.0f} 元/天")
+            c_kpi2.metric("日均 V2G 净套利收益", f"{daily_net_gain:.0f} 元/天")
             
-            if payback_days < 365:
-                c_kpi3.metric("设备投资静态回收期", f"{payback_days:.0f} 天", delta="极优", delta_color="normal")
-            elif payback_days < 3650:
-                c_kpi3.metric("设备投资静态回收期", f"{payback_days/365:.1f} 年", delta="良好", delta_color="normal")
+            if dynamic_payback < 365:
+                c_kpi3.metric("动态投资回收期(含折现)", f"{dynamic_payback:.0f} 天", delta="极优", delta_color="normal")
+            elif dynamic_payback < 3650:
+                c_kpi3.metric("动态投资回收期(含折现)", f"{dynamic_payback/365:.1f} 年", delta="良好", delta_color="normal")
             else:
-                c_kpi3.metric("设备投资静态回收期", f"> 10 年", delta="盈利困难", delta_color="inverse")
+                c_kpi3.metric("动态投资回收期(含折现)", f"> 10 年", delta="盈利困难", delta_color="inverse")
             
             st.write("---")
             
