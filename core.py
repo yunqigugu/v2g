@@ -27,7 +27,8 @@ def synth_load(day_idx, cfg):
     p1 = 2000.0 * np.exp(-((h - 9) ** 2) / 2.0)
     p2 = 3000.0 * np.exp(-((h - 19) ** 2) / 3.0)
     arr = 4000.0 + p1 + p2 + rng.normal(0, 100, 48)
-    return np.clip(arr * cfg.get("load_scale", 1.0), 0, None)
+    # ★ 修改：适配前端传入的 base_load_scale
+    return np.clip(arr * cfg.get("base_load_scale", 1.0), 0, None)
 
 def synth_pv(day_idx, cfg):
     rng = np.random.default_rng(cfg["seed"] + day_idx * 37 + 1)
@@ -37,10 +38,12 @@ def synth_pv(day_idx, cfg):
     pv = 5000.0 * season * np.sin(np.pi * (h - 6) / 12)
     pv = np.where((h >= 6) & (h <= 18), pv, 0.0)
     arr = pv + rng.normal(0, 50, 48)
-    return np.clip(arr * cfg.get("pv_scale", 1.0), 0, None)
+    # ★ 修改：同时考虑天气系数(pv_scale)和装机缩放(pv_capacity_scale)
+    total_pv_scale = cfg.get("pv_scale", 1.0) * cfg.get("pv_capacity_scale", 1.0)
+    return np.clip(arr * total_pv_scale, 0, None)
 
 # ============================================================
-# EV 车队生成 (★ 修改：支持私家车与营运车分类生成)
+# EV 车队生成 (★ 支持私家车与营运车分类生成)
 # ============================================================
 def gen_ev_fleet(day_idx, cfg):
     n_ev = cfg["n_ev"]
@@ -188,11 +191,21 @@ def _build_milp(price, load, pv, fleet, cfg, mode, e_bess_init=None, e_ev_init=N
     obj += pulp.lpSum(cfg["emergency_ratio"] * price[t] * pg_emerg[t] * dt for t in range(n))
     if use_sell: obj += -pulp.lpSum(price[t] * cfg["sell_ratio"] * ps[t] * dt for t in range(n))
 
-    if cfg.get("C3_degradation", False):
-        c3 = cfg.get("C3_cost_per_kwh", 0.167)
-        obj += pulp.lpSum(c3 * pd_b[t] * dt for t in range(n))
+    # ★ 新增：需量电费惩罚（迫使算法平滑 pg[t] 的尖峰）
+    demand_rate = cfg.get("demand_charge_rate", 0.0)
+    if demand_rate > 0:
+        peak_pg = pulp.LpVariable("peak_pg", lowBound=0)
+        for t in range(n):
+            m += peak_pg >= pg[t]
+        obj += demand_rate * peak_pg
+
+    # ★ 新增：电池折旧成本（BESS + EV反向放电）
+    # 兼容前端传入的 degradation_cost，如果前端没传，则读取 C3_cost_per_kwh
+    degr_cost = cfg.get("degradation_cost", cfg.get("C3_cost_per_kwh", 0.167))
+    if cfg.get("C3_degradation", False) or cfg.get("degradation_cost", 0) > 0:
+        obj += pulp.lpSum(degr_cost * pd_b[t] * dt for t in range(n))
         if use_ev_dis:
-            for i in range(n_ev): obj += pulp.lpSum(c3 * pde[i][t] * dt for t in range(n))
+            for i in range(n_ev): obj += pulp.lpSum(degr_cost * pde[i][t] * dt for t in range(n))
 
     if cfg.get("C2_cvar", False) and n > 0:
         lam = cfg.get("C2_lambda", 0.30)
@@ -294,6 +307,8 @@ def _solve_and_extract(m, v, price, load, pv, cfg):
     cost_buy = float(np.sum(price * pg + cfg["emergency_ratio"] * price * pg_emerg) * dt)
     rev_sell = (float(np.sum(price * cfg["sell_ratio"] * ps) * dt) if v["use_sell"] else 0.0)
     slack_total = float(sum(_g(x) for x in v["ev_slack"]))
+    
+    # 这里计算的是 MILP 的纯目标值（电费 + 折损 + 需量），前端拿到后会再次叠加外部计算的需量
     cost = cost_buy - rev_sell + cfg["ev_slack_penalty"] * slack_total
 
     return {
@@ -367,7 +382,6 @@ def allocate_revenue(total_gain, cfg):
 _GLOBAL_EV_POOL = {}
 
 def _gen_ev_fleet_master(day_idx, cfg, master_n):
-    # 母车队池保持原有的单一分布即可，不影响前端展示
     rng = np.random.default_rng(cfg["seed"] + day_idx * 17)
     peaks = cfg["ev_arr_peaks"]
     w = np.array([p[2] for p in peaks]); w = w / w.sum()
