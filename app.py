@@ -45,6 +45,7 @@ custom_css = """
     .advice-box { background: rgba(0, 230, 118, 0.08); border-left: 4px solid #00E676; padding: 15px; border-radius: 4px; margin-top: 10px; color: #E2E8F0; }
     .advice-box h4 { color: #00E676; margin-top: 0; margin-bottom: 10px; }
     .advice-box ul { margin-bottom: 0; padding-left: 20px; }
+    .suggestion-title { color: #00E5FF; font-size: 1.05rem; font-weight: bold; margin-top: 15px; margin-bottom: 5px; border-bottom: 1px dashed rgba(0, 229, 255, 0.3); padding-bottom: 3px;}
 </style>
 """
 st.markdown(custom_css, unsafe_allow_html=True)
@@ -74,13 +75,12 @@ with st.sidebar:
     sell_ratio = st.slider("售电比例", 0.1, 1.0, 0.60, 0.05)
     emergency_ratio = st.slider("紧急购电惩罚倍数", 1.0, 10.0, 5.0, 0.5)
 
-    # ★ 新增：车队分类与投资回收期参数
     st.markdown("<h2 class='sidebar-header'>🚗 2. 车队结构与设备投资</h2>", unsafe_allow_html=True)
     enable_ev_split = st.checkbox("开启车队分类模拟 (私家车 vs 运营车)", value=False)
     if enable_ev_split:
         ev_private_ratio = st.slider("私家车占比", 0.1, 1.0, 0.8, 0.1)
     else:
-        ev_private_ratio = 1.0 # 不分的话默认全当私家车
+        ev_private_ratio = 1.0 
         
     infra_cost = st.number_input("双向充电桩单辆改造成本 (元)", min_value=0, max_value=10000, value=2000, step=500)
 
@@ -284,100 +284,142 @@ else:
     # ---------- Tab 1: 调度明细与趋势 ----------
     with tab1:
         with st.container(border=True):
-            view_mode = st.radio("选择视图模式", ["📈 全局累计成本走势 (宏观趋势)", "📊 单日微观运行细节"], horizontal=True)
-            if view_mode == "📈 全局累计成本走势 (宏观趋势)":
-                df_daily = res["daily_df"].copy().reset_index()
-                if "Day" not in df_daily.columns: df_daily = df_daily.rename(columns={df_daily.columns[0]: "Day"})
-                for col in ["A1", "A2", "A3", "A4"]:
-                    if col in df_daily.columns: df_daily[f"Cum_{col}"] = df_daily[col].cumsum()
-                fig = go.Figure()
-                for i, col in enumerate(["A1", "A2", "A3", "A4"]):
-                    if f"Cum_{col}" in df_daily.columns:
-                        fig.add_trace(go.Scatter(x=df_daily["Day"], y=df_daily[f"Cum_{col}"], name=SCENARIO_LABELS.get(col, col), mode="lines+markers", line=dict(color=FUTURE_COLORS[i], width=3), marker=dict(size=8)))
-                fig.update_layout(title="各场景累计总成本走势对比", template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(title="天数 (Day)", gridcolor="rgba(255,255,255,0.05)", dtick=max(1, len(df_daily)//10)), yaxis=dict(title="累计总成本 (元)", gridcolor="rgba(255,255,255,0.05)"), hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(l=20, r=20, t=50, b=20))
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                c1, c2, c3 = st.columns([1.5, 2, 3.5])
-                with c1: t_day = st.selectbox("选择查看哪一天：", options=res["df_timeseries"]["Day"].unique(), index=0)
-                with c2: t_scens = st.multiselect("对比场景", ["A1", "A2", "A3", "A4"], default=["A3", "A4"])
-                with c3:
-                    y_options = {"Load": "基础负荷 (kW)", "PV": "光伏出力 (kW)", "Grid_Buy": "电网购电 (kW)", "Grid_Sell": "电网售电 (kW)", "EV_Charge": "EV充电 (kW)", "EV_Discharge": "EV放电 (kW)", "BESS_Charge": "BESS充电 (kW)", "BESS_Discharge": "BESS放电 (kW)", "Price": "电价 (元/kWh)"}
-                    y_cols = st.multiselect("叠加指标", options=list(y_options.keys()), default=["Load", "EV_Charge", "EV_Discharge"], format_func=lambda x: y_options[x])
-                df_day = res["df_timeseries"][(res["df_timeseries"]["Day"] == t_day) & (res["df_timeseries"]["Scenario"].isin(t_scens))]
+            st.markdown("#### 📊 单日微观运行细节")
+            c1, c2, c3 = st.columns([1.5, 2, 3.5])
+            with c1: t_day = st.selectbox("选择查看哪一天：", options=res["df_timeseries"]["Day"].unique(), index=0)
+            with c2: t_scens = st.multiselect("对比场景", ["A1", "A2", "A3", "A4"], default=["A3", "A4"])
+            with c3:
+                y_options = {"Load": "基础负荷 (kW)", "PV": "光伏出力 (kW)", "Grid_Buy": "电网购电 (kW)", "Grid_Sell": "电网售电 (kW)", "EV_Charge": "EV充电 (kW)", "EV_Discharge": "EV放电 (kW)", "BESS_Charge": "BESS充电 (kW)", "BESS_Discharge": "BESS放电 (kW)", "Price": "电价 (元/kWh)"}
+                y_cols = st.multiselect("叠加指标", options=list(y_options.keys()), default=["Load", "EV_Charge", "EV_Discharge"], format_func=lambda x: y_options[x])
+            df_day = res["df_timeseries"][(res["df_timeseries"]["Day"] == t_day) & (res["df_timeseries"]["Scenario"].isin(t_scens))]
+            
+            # 如果开启了分类，额外展示私家车和运营车的参数对比图
+            if res.get("used_enable_split", False):
+                st.write("---")
+                st.markdown("##### 📊 车队分类特征对比 (到达时间与放电意愿)")
+                from core import gen_ev_fleet
+                cfg_draw = copy.deepcopy(CONFIG)
+                cfg_draw.update({"n_ev": n_ev, "enable_ev_split": True, "ev_private_ratio": ev_private_ratio})
+                fleet_draw = gen_ev_fleet(int(t_day)-1, cfg_draw)
                 
-                # 如果开启了分类，额外展示私家车和运营车的参数对比图
-                if res.get("used_enable_split", False):
-                    st.write("---")
-                    st.markdown("##### 📊 车队分类特征对比 (到达时间与放电意愿)")
-                    # 从底层重新获取一下当天的原始 fleet 数据用于画图
-                    from core import gen_ev_fleet
-                    cfg_draw = copy.deepcopy(CONFIG)
-                    cfg_draw.update({"n_ev": n_ev, "enable_ev_split": True, "ev_private_ratio": ev_private_ratio})
-                    fleet_draw = gen_ev_fleet(int(t_day)-1, cfg_draw)
+                if "is_private_mask" in fleet_draw:
+                    mask = fleet_draw["is_private_mask"] == 1
+                    df_fleet = pd.DataFrame({
+                        "到达时间": fleet_draw["t_arr"] * 0.5,
+                        "意愿系数": fleet_draw["will"],
+                        "类型": np.where(mask, "私家车", "运营车")
+                    })
+                    fig_scatter = px.scatter(df_fleet, x="到达时间", y="意愿系数", color="类型", 
+                                             color_discrete_map={"私家车": "#00E5FF", "运营车": "#FF9100"},
+                                             title="私家车 vs 运营车：出行与意愿特征",
+                                             template=PLOTLY_TEMPLATE)
+                    fig_scatter.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=40, b=20))
+                    st.plotly_chart(fig_scatter, use_container_width=True)
+                    st.info("💡 **洞察：** 私家车（青色）到达晚且意愿低，主要承担夜间谷电充电；运营车（橙色）到达早且意愿极高，更容易在日间被调度参与高频次放电。")
+                st.write("---")
+
+            if not df_day.empty and y_cols:
+                plot_y_cols = [c for c in y_cols if c != "Price"]
+                if plot_y_cols:
+                    df_melt = df_day.melt(id_vars=["Hour", "Scenario", "Price"], value_vars=plot_y_cols, var_name="指标", value_name="功率")
+                    df_melt["指标"] = df_melt["指标"].map(y_options)
+                    fig = go.Figure()
+                    for i, (metric, group) in enumerate(df_melt.groupby("指标")):
+                        for scen in t_scens:
+                            scen_data = group[group["Scenario"] == scen]
+                            if scen_data.empty: continue
+                            fig.add_trace(go.Scatter(x=scen_data["Hour"], y=scen_data["功率"], name=f"{SCENARIO_LABELS.get(scen, scen)} - {metric}", mode="lines", line=dict(color=FUTURE_COLORS[i % len(FUTURE_COLORS)], dash='solid' if scen == "A4" else 'dot', width=2)))
+                else: fig = go.Figure()
                     
-                    if "is_private_mask" in fleet_draw:
-                        mask = fleet_draw["is_private_mask"] == 1
-                        df_fleet = pd.DataFrame({
-                            "到达时间": fleet_draw["t_arr"] * 0.5,
-                            "意愿系数": fleet_draw["will"],
-                            "类型": np.where(mask, "私家车", "运营车")
-                        })
-                        fig_scatter = px.scatter(df_fleet, x="到达时间", y="意愿系数", color="类型", 
-                                                 color_discrete_map={"私家车": "#00E5FF", "运营车": "#FF9100"},
-                                                 title="私家车 vs 运营车：出行与意愿特征",
-                                                 template=PLOTLY_TEMPLATE)
-                        fig_scatter.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=40, b=20))
-                        st.plotly_chart(fig_scatter, use_container_width=True)
-                        st.info("💡 **洞察：** 私家车（青色）到达晚且意愿低，主要承担夜间谷电充电；运营车（橙色）到达早且意愿极高，更容易在日间被调度参与高频次放电。")
-                    st.write("---")
+                if "Price" in y_cols:
+                    df_price = df_day.drop_duplicates("Hour")
+                    fig.add_trace(go.Scatter(x=df_price["Hour"], y=df_price["Price"], name="电价 (元/kWh)", mode="lines", line=dict(color="#B0BEC5", width=2, dash="dash"), yaxis="y2"))
+                else:
+                    fig.add_trace(go.Scatter(x=[], y=[], name="电价 (元/kWh)", yaxis="y2", showlegend=False))
 
-                if not df_day.empty and y_cols:
-                    plot_y_cols = [c for c in y_cols if c != "Price"]
-                    if plot_y_cols:
-                        df_melt = df_day.melt(id_vars=["Hour", "Scenario", "Price"], value_vars=plot_y_cols, var_name="指标", value_name="功率")
-                        df_melt["指标"] = df_melt["指标"].map(y_options)
-                        fig = go.Figure()
-                        for i, (metric, group) in enumerate(df_melt.groupby("指标")):
-                            for scen in t_scens:
-                                scen_data = group[group["Scenario"] == scen]
-                                if scen_data.empty: continue
-                                fig.add_trace(go.Scatter(x=scen_data["Hour"], y=scen_data["功率"], name=f"{SCENARIO_LABELS.get(scen, scen)} - {metric}", mode="lines", line=dict(color=FUTURE_COLORS[i % len(FUTURE_COLORS)], dash='solid' if scen == "A4" else 'dot', width=2)))
-                    else: fig = go.Figure()
-                        
-                    if "Price" in y_cols:
-                        df_price = df_day.drop_duplicates("Hour")
-                        fig.add_trace(go.Scatter(x=df_price["Hour"], y=df_price["Price"], name="电价 (元/kWh)", mode="lines", line=dict(color="#B0BEC5", width=2, dash="dash"), yaxis="y2"))
-                    else:
-                        fig.add_trace(go.Scatter(x=[], y=[], name="电价 (元/kWh)", yaxis="y2", showlegend=False))
+                # 图例移至底部，增加底部边距 b=100
+                fig.update_layout(
+                    title=f"Day {t_day} 功率与电价时序对比 | 天气: {weather_scene}", 
+                    template=PLOTLY_TEMPLATE, 
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=4), 
+                    yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.05)"), 
+                    yaxis2=dict(title="电价 (元/kWh)", overlaying="y", side="right", showgrid=False), 
+                    hovermode="x unified", 
+                    legend=dict(
+                        orientation="h", 
+                        yanchor="top", 
+                        y=-0.25, 
+                        xanchor="center", 
+                        x=0.5
+                    ), 
+                    margin=dict(l=20, r=20, t=50, b=100) 
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
-                    fig.update_layout(title=f"Day {t_day} 功率与电价时序对比 | 天气: {weather_scene}", template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=4), yaxis=dict(title="功率 (kW)", gridcolor="rgba(255,255,255,0.05)"), yaxis2=dict(title="电价 (元/kWh)", overlaying="y", side="right", showgrid=False), hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), margin=dict(l=20, r=20, t=50, b=20))
-                    st.plotly_chart(fig, use_container_width=True)
-
-                    # ================= ★ 动态图表诊断分析 =================
-                    df_a3 = df_day[df_day["Scenario"] == "A3"]
-                    df_a4 = df_day[df_day["Scenario"] == "A4"]
-                    ev_dis_a4 = df_a4["EV_Discharge"].sum() * 0.5 if not df_a4.empty else 0
-                    peak_dis_a4 = df_a4[df_a4["Hour"].between(17, 21.5)]["EV_Discharge"].sum() * 0.5 if not df_a4.empty else 0
-                    valley_chg_a4 = df_a4[df_a4["Hour"].between(0, 7.5)]["EV_Charge"].sum() * 0.5 if not df_a4.empty else 0
-                    
-                    diagnosis_html = "<div class='advice-box'><h4>🔍 单日图表智能诊断与参数调整建议：</h4><ul>"
-                    if "EV_Discharge" in y_cols and "Price" in y_cols:
-                        if ev_dis_a4 > 10:
-                            ratio = peak_dis_a4 / ev_dis_a4 * 100 if ev_dis_a4 > 0 else 0
-                            diagnosis_html += f"<li><b>套利行为分析：</b>EV 在电价高峰时段累计放电 <b>{peak_dis_a4:.0f} kWh</b>，占全天放电量的 {ratio:.0f}%。成功捕捉高价差。</li>"
+                # ================= ★ 动态图表诊断分析 =================
+                df_a3 = df_day[df_day["Scenario"] == "A3"]
+                df_a4 = df_day[df_day["Scenario"] == "A4"]
+                ev_dis_a4 = df_a4["EV_Discharge"].sum() * 0.5 if not df_a4.empty else 0
+                peak_dis_a4 = df_a4[df_a4["Hour"].between(17, 21.5)]["EV_Discharge"].sum() * 0.5 if not df_a4.empty else 0
+                valley_chg_a4 = df_a4[df_a4["Hour"].between(0, 7.5)]["EV_Charge"].sum() * 0.5 if not df_a4.empty else 0
+                
+                diagnoses = []
+                suggestions = []
+                
+                # 1. 套利行为诊断
+                if "EV_Discharge" in y_cols:
+                    if ev_dis_a4 > 10:
+                        ratio = peak_dis_a4 / ev_dis_a4 * 100 if ev_dis_a4 > 0 else 0
+                        diagnoses.append(f"<b>套利行为分析：</b>EV 在电价高峰时段累计放电 <b>{peak_dis_a4:.0f} kWh</b>，占全天放电量的 {ratio:.0f}%，成功捕捉高价差。")
+                        if ratio > 60:
+                            suggestions.append("放电高度集中在晚高峰，符合峰谷套利目标，当前售电参数设置合理，可继续保持。")
                         else:
-                            diagnosis_html += f"<li><b>套利行为分析：</b>当前单日 EV 放电量极低（仅 {ev_dis_a4:.0f} kWh）。可能因为离站需求高或 C5(DoD) 限制过严。</li>"
-                    if "EV_Charge" in y_cols and "Price" in y_cols:
-                        if valley_chg_a4 > 10:
-                            diagnosis_html += f"<li><b>填谷行为分析：</b>EV 在凌晨低谷时段累计充电 <b>{valley_chg_a4:.0f} kWh</b>，有效利用低价电。</li>"
-                    if "A3" in t_scens and "A4" in t_scens and ("EV_Discharge" in y_cols or "EV_Charge" in y_cols):
-                        ev_dis_a3 = df_a3["EV_Discharge"].sum() * 0.5 if not df_a3.empty else 0
-                        if ev_dis_a4 > ev_dis_a3 + 10:
-                            diagnosis_html += f"<li><b>策略对比优势：</b>A4 (V2G) 比 A3 (智能充电) 增加了 <b>{ev_dis_a4 - ev_dis_a3:.0f} kWh</b> 的反向放电。</li>"
-                    if ev_dis_a4 < 1 and "A4" in t_scens:
-                         diagnosis_html += f"<li><b>⚠️ 核心参数预警：</b>A4场景下 EV 全天几乎未放电！建议去侧边栏将“售电比例”拉高至 0.8 以上。</li>"
-                    diagnosis_html += "</ul></div>"
-                    st.markdown(diagnosis_html, unsafe_allow_html=True)
+                            suggestions.append("虽然产生了放电，但未完全集中在最高价时段。建议检查是否受限于车辆离站时间（EV行为限制）或变压器容量限制（C4）。")
+                    else:
+                        diagnoses.append(f"<b>套利行为分析：</b>当前单日 EV 放电量极低（仅 {ev_dis_a4:.0f} kWh）。")
+                        suggestions.append("EV放电意愿极低！建议去左侧将“售电比例”拉高（如0.8以上），或检查是否开启了过严的电池折旧限制（C3）和放电深度限制（C5）。")
+
+                # 2. 填谷行为诊断
+                if "EV_Charge" in y_cols:
+                    if valley_chg_a4 > 10:
+                        diagnoses.append(f"<b>填谷行为分析：</b>EV 在凌晨低谷时段累计充电 <b>{valley_chg_a4:.0f} kWh</b>，有效利用了低价电。")
+                    else:
+                        diagnoses.append(f"<b>填谷行为分析：</b>EV 在凌晨低谷时段充电量较少。")
+                        suggestions.append("若系统缺电，建议引导车辆在谷价时段（凌晨）充电，避免在平段或峰段充电抬高净负荷。")
+
+                # 3. 策略对比诊断
+                if "A3" in t_scens and "A4" in t_scens and ("EV_Discharge" in y_cols or "EV_Charge" in y_cols):
+                    ev_dis_a3 = df_a3["EV_Discharge"].sum() * 0.5 if not df_a3.empty else 0
+                    if ev_dis_a4 > ev_dis_a3 + 10:
+                        diagnoses.append(f"<b>策略对比优势：</b>A4 (V2G) 比 A3 (智能充电) 增加了 <b>{ev_dis_a4 - ev_dis_a3:.0f} kWh</b> 的反向放电。")
+                        suggestions.append("V2G 策略优势明显。建议在车队中扩大双向充电桩改造比例，鼓励更多车主参与放电，以获取更高的增量收益。")
+                    else:
+                        diagnoses.append(f"<b>策略对比受限：</b>A4 的反向放电量并未明显高于 A3。")
+                        suggestions.append("当前 V2G 效果不显，可能是系统本身并不缺电。建议减少 BESS 规模，或降低光伏出力（如选择阴雨天气），以凸显 V2G 的应急价值。")
+
+                # 4. 兜底建议
+                if not diagnoses:
+                    diagnoses.append("当前勾选的指标较少，未能触发深度运行特征诊断。")
+                    suggestions.append("建议在上方“叠加指标”中同时勾选 **“电价”**、**“EV充电”** 和 **“EV放电”**，以便系统为你提供更详尽的套利分析建议。")
+
+                # 组装 HTML
+                diagnosis_html = "<div class='advice-box'><h4>🔍 单日图表智能诊断：</h4>"
+                diagnosis_html += "<ul>"
+                for d in diagnoses:
+                    diagnosis_html += f"<li>{d}</li>"
+                diagnosis_html += "</ul>"
+                
+                if suggestions:
+                    diagnosis_html += "<div class='suggestion-title'>💡 行动建议：</div>"
+                    diagnosis_html += "<ul>"
+                    for s in suggestions:
+                        diagnosis_html += f"<li>{s}</li>"
+                    diagnosis_html += "</ul>"
+                
+                diagnosis_html += "</div>"
+                st.markdown(diagnosis_html, unsafe_allow_html=True)
 
     # ---------- Tab 2: 边际效益分析 ----------
     with tab2:
