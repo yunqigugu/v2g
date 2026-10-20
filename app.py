@@ -150,6 +150,7 @@ if run_btn:
         "bess_pc_max": bess_cap / 4.0, "bess_pd_max": bess_cap / 4.0, "n_ev": n_ev, "n_days": n_days, 
         "sell_ratio": sell_ratio, "emergency_ratio": emergency_ratio, 
         "pv_scale": current_pv_scale, "base_load_scale": base_load_scale, "pv_capacity_scale": pv_capacity_scale,
+        "demand_charge_rate": demand_charge_rate, "degradation_cost": degradation_cost,
         "enable_ev_split": enable_ev_split, 
         "ev_private_ratio": ev_private_ratio,
         "B1_pv": b1, "B2_load": b2, "B3_price": b3, "B4_ev": b4, 
@@ -291,7 +292,7 @@ else:
         
         # 动态回收期 (考虑折现)
         annual_gain = daily_net_gain * 365
-        dynamic_payback = total_infra_cost / (annual_gain * (1 - discount_rate)) if annual_gain > 0 else 9999
+        dynamic_payback_years = total_infra_cost / (annual_gain * (1 - discount_rate)) if annual_gain > 0 else 9999
         
         advice_html = "<div class='advice-box'><h4>💡 真实商业环境运行分析报告：</h4><ul>"
         if is_v2g_best:
@@ -302,14 +303,14 @@ else:
         if res.get("used_enable_split", False):
             advice_html += f"<li><b>车队分类：</b>检测到开启了车队分类模拟，私家车占主导的分布将导致放电深度受限。</li>"
         
-        if dynamic_payback < 365:
-            advice_html += f"<li><b>💰 动态投资回报（含 {discount_rate*100}% 折现）：</b>按单桩改造成本 {res.get('used_infra_cost', 2000)} 元计算，预计 <b>{dynamic_payback:.0f} 天</b> 即可收回设备投资。</li>"
-        elif dynamic_payback < 3650:
-            advice_html += f"<li><b>💰 动态投资回报（含 {discount_rate*100}% 折现）：</b>按单桩改造成本 {res.get('used_infra_cost', 2000)} 元计算，预计 <b>{dynamic_payback/365:.1f} 年</b> 可收回投资。</li>"
+        if dynamic_payback_years < 1:
+            advice_html += f"<li><b>💰 动态投资回报（含 {discount_rate*100}% 折现）：</b>按单桩改造成本 {res.get('used_infra_cost', 2000)} 元计算，预计 <b>{dynamic_payback_years * 365:.0f} 天</b> 即可收回设备投资。</li>"
+        elif dynamic_payback_years < 10:
+            advice_html += f"<li><b>💰 动态投资回报（含 {discount_rate*100}% 折现）：</b>按单桩改造成本 {res.get('used_infra_cost', 2000)} 元计算，预计 <b>{dynamic_payback_years:.1f} 年</b> 可收回投资。</li>"
         else:
             advice_html += f"<li><b>🚨 投资回报预警：</b>动态回收期超过 10 年。建议优先推广低成本的单向有序充电，暂缓 V2G 改造。</li>"
             
-        advice_html += f"<li><b>🔋 电池寿命折损说明：</b>本次仿真 V2G 放电共计 <b>{res.get('ev_degradation_total', 0)/degradation_cost:.0f} kWh</b>，按 {degradation_cost} 元/kWh 折损计，已扣除电池寿命成本 <b>{res.get('ev_degradation_total', 0):.0f} 元</b>。</li>"
+        advice_html += f"<li><b>🔋 电池寿命折损说明：</b>本次仿真 V2G 放电共计 <b>{res.get('ev_degradation_total', 0)/degradation_cost if degradation_cost > 0 else 0:.0f} kWh</b>，按 {degradation_cost} 元/kWh 折损计，已扣除电池寿命成本 <b>{res.get('ev_degradation_total', 0):.0f} 元</b>。</li>"
         advice_html += f"<li><b>📉 需量电费影响：</b>需量单价设定为 {demand_charge_rate} 元/kW·天。A4 因削峰填谷，成功避免了因峰值过高导致的额外惩罚。</li>"
         advice_html += "</ul></div>"
         st.markdown(advice_html, unsafe_allow_html=True)
@@ -493,41 +494,47 @@ else:
 
             st.write("---") 
             st.subheader("🔍 V2G (A4) 单日真实账单瀑布拆解")
+            
+            # 获取关键的财务指标
             df_a4 = res["df_timeseries"][res["df_timeseries"]["Scenario"] == "A4"].copy()
-            if not df_a4.empty:
-                sell_ratio_used = res.get("used_sell_ratio", 0.60)
-                df_a4["Buy_Cost"] = df_a4["Grid_Buy"] * df_a4["Price"] * 0.5
-                df_a4["Sell_Revenue"] = df_a4["Grid_Sell"] * df_a4["Price"] * sell_ratio_used * 0.5
-                
-                total_buy = df_a4["Buy_Cost"].sum()
-                total_sell = df_a4["Sell_Revenue"].sum()
-                total_demand = res["daily_df"]["A4_DemandCost"].sum() if "A4_DemandCost" in res["daily_df"] else 0
-                total_degr = res.get("ev_degradation_total", 0)
-                net_cost = total_buy - total_sell + total_demand + total_degr
+            df_a2 = res["df_timeseries"][res["df_timeseries"]["Scenario"] == "A2"].copy()
+            
+            sell_ratio_used = res.get("used_sell_ratio", 0.60)
+            
+            a4_buy_cost = (df_a4["Grid_Buy"] * df_a4["Price"] * 0.5).sum()
+            a4_sell_revenue = (df_a4["Grid_Sell"] * df_a4["Price"] * sell_ratio_used * 0.5).sum()
+            a4_demand_cost = res["daily_df"]["A4_DemandCost"].sum() if "A4_DemandCost" in res["daily_df"] else 0
+            a4_degr_cost = res.get("ev_degradation_total", 0)
+            
+            a2_buy_cost = (df_a2["Grid_Buy"] * df_a2["Price"] * 0.5).sum()
+            a2_demand_cost = res["daily_df"]["A2_DemandCost"].sum() if "A2_DemandCost" in res["daily_df"] else 0
+            a2_total_cost = a2_buy_cost + a2_demand_cost
 
-                # 瀑布图
-                fig_waterfall = go.Figure(go.Waterfall(
-                    name="V2G账单", orientation="v",
-                    measure=["relative", "relative", "relative", "relative", "total"],
-                    x=["电网买电花费", "V2G卖电收入", "需量电费(基本费)", "电池寿命折损", "最终真实净支出"],
-                    y=[total_buy, -total_sell, total_demand, total_degr, net_cost],
-                    text=[f"-{total_buy:.0f}", f"+{total_sell:.0f}", f"-{total_demand:.0f}", f"-{total_degr:.0f}", f"{net_cost:.0f}"],
-                    textposition="outside",
-                    connector={"line": {"color": "rgb(63, 63, 63)"}},
-                    decreasing={"marker": {"color": "#00E676"}},
-                    increasing={"marker": {"color": "#FF4B4B"}},
-                    totals={"marker": {"color": "#00E5FF"}}
-                ))
-                fig_waterfall.update_layout(
-                    title="仿真期间 V2G (A4) 财务账单拆解 (越低越好)",
-                    template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
-                    margin=dict(t=60, b=20, l=20, r=20), 
-                    yaxis=dict(title="金额 (元)", gridcolor="rgba(255,255,255,0.05)"),
-                    xaxis=dict(title="财务科目"),
-                    showlegend=False
-                )
-                st.plotly_chart(fig_waterfall, use_container_width=True)
-                st.info(f"💡 **商业拆解**：虽然 V2G 卖电赚了 {total_sell:.0f} 元，但不可忽视的是，设备需要交 {total_demand:.0f} 元的需量基本电费，且放电透支了 {total_degr:.0f} 元的电池寿命。最终系统真实掏出去的钱是 **{net_cost:.0f} 元**。")
+            # 瀑布图逻辑：以 A2 为基础，展示如何一点点省下钱的
+            saving_energy = a2_buy_cost - a4_buy_cost
+            
+            fig_waterfall = go.Figure(go.Waterfall(
+                name="V2G账单", orientation="v",
+                measure=["absolute", "relative", "relative", "relative", "relative", "total"],
+                x=["A2无序总支出(基准)", "智能调度节省", "V2G卖电收入", "需量电费(新增)", "电池寿命折损", "A4最终真实支出"],
+                y=[a2_total_cost, -saving_energy, -a4_sell_revenue, a4_demand_cost, a4_degr_cost, a4_buy_cost - a4_sell_revenue + a4_demand_cost + a4_degr_cost],
+                text=[f"{a2_total_cost:.0f}", f"-{saving_energy:.0f}", f"-{a4_sell_revenue:.0f}", f"+{a4_demand_cost:.0f}", f"+{a4_degr_cost:.0f}", f"{a4_buy_cost - a4_sell_revenue + a4_demand_cost + a4_degr_cost:.0f}"],
+                textposition="outside",
+                connector={"line": {"color": "rgba(255,255,255,0.2)"}},
+                decreasing={"marker": {"color": "#00E676"}}, # 绿色代表省钱/收入
+                increasing={"marker": {"color": "#FF4B4B"}}, # 红色代表支出增加
+                totals={"marker": {"color": "#00E5FF"}}     # 青色代表最终结果
+            ))
+            fig_waterfall.update_layout(
+                title="V2G 财务账单演进 (从无序充电的混乱到 V2G 的智能)",
+                template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
+                margin=dict(t=60, b=20, l=20, r=20), 
+                yaxis=dict(title="金额 (元)", gridcolor="rgba(255,255,255,0.05)"),
+                xaxis=dict(title="财务科目"),
+                showlegend=False
+            )
+            st.plotly_chart(fig_waterfall, use_container_width=True)
+            st.info(f"💡 **商业拆解**：对比 A2 无序充电的惨状，V2G 通过削峰填谷直接省下 **{saving_energy:.0f} 元** 电费，如果有额外卖电还能赚 **{a4_sell_revenue:.0f} 元**。即便扣除了设备基本电费 {a4_demand_cost:.0f} 元和电池寿命损耗 {a4_degr_cost:.0f} 元，最终系统真实掏出去的钱只有 **{a4_buy_cost - a4_sell_revenue + a4_demand_cost + a4_degr_cost:.0f} 元**。")
 
     # ---------- Tab 4: ⚡ 电网冲击分析 ----------
     with tab_impact:
@@ -640,10 +647,11 @@ else:
             c_kpi1.metric("双向设备总改造成本", f"{total_infra:.0f} 元")
             c_kpi2.metric("日均 V2G 净套利收益", f"{daily_net_gain:.0f} 元/天")
             
-            if dynamic_payback < 365:
-                c_kpi3.metric("动态投资回收期(含折现)", f"{dynamic_payback:.0f} 天", delta="极优", delta_color="normal")
-            elif dynamic_payback < 3650:
-                c_kpi3.metric("动态投资回收期(含折现)", f"{dynamic_payback/365:.1f} 年", delta="良好", delta_color="normal")
+            # 修复：单位改为正确的天数
+            if dynamic_payback_years < 1:
+                c_kpi3.metric("动态投资回收期(含折现)", f"{dynamic_payback_years * 365:.0f} 天", delta="极优", delta_color="normal")
+            elif dynamic_payback_years < 10:
+                c_kpi3.metric("动态投资回收期(含折现)", f"{dynamic_payback_years:.1f} 年", delta="良好", delta_color="normal")
             else:
                 c_kpi3.metric("动态投资回收期(含折现)", f"> 10 年", delta="盈利困难", delta_color="inverse")
             
