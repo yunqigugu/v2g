@@ -40,40 +40,80 @@ def synth_pv(day_idx, cfg):
     return np.clip(arr * cfg.get("pv_scale", 1.0), 0, None)
 
 # ============================================================
-# EV 车队生成
+# EV 车队生成 (★ 修改：支持私家车与营运车分类生成)
 # ============================================================
 def gen_ev_fleet(day_idx, cfg):
     n_ev = cfg["n_ev"]
     rng = np.random.default_rng(cfg["seed"] + day_idx * 17)
-    peaks = cfg["ev_arr_peaks"]
-    w = np.array([p[2] for p in peaks]); w = w / w.sum()
-    which = rng.choice(len(peaks), size=n_ev, p=w)
-    arrivals = np.array([rng.normal(peaks[k][0], peaks[k][1]) for k in which])
-    arrivals = np.clip(arrivals, 0.0, 22.0)
-    dwell = np.clip(rng.normal(cfg["ev_dwell_mean_h"], cfg["ev_dwell_std_h"], n_ev), cfg["ev_dwell_min_h"], cfg["ev_dwell_max_h"])
-    departures = np.clip(arrivals + dwell, 0.0, 23.9)
-    will = rng.beta(cfg["ev_will_alpha"], cfg["ev_will_beta"], n_ev)
-    e_cap = rng.choice(cfg["ev_cap_choices"], size=n_ev, p=cfg["ev_cap_probs"]).astype(float)
-    soc_arr = np.clip(rng.normal(cfg["ev_soc_arr_mean"], cfg["ev_soc_arr_std"], n_ev), 0.10, 0.60)
-    soc_dep = np.clip(rng.normal(cfg["ev_soc_dep_mean"], cfg["ev_soc_dep_std"], n_ev), 0.70, 0.95)
-    t_arr = np.clip((arrivals * 2).astype(int), 0, 47)
-    t_dep = np.clip((departures * 2).astype(int), 1, 48)
+    
+    # 判断是否开启分类
+    enable_split = cfg.get("enable_ev_split", False)
+    if enable_split:
+        ratio = cfg.get("ev_private_ratio", 0.8)
+        n_priv = int(n_ev * ratio)
+        n_op = n_ev - n_priv
+    else:
+        n_priv = n_ev
+        n_op = 0
 
-    for i in range(n_ev):
-        dt_h = cfg["dt_h"]
-        max_kwh = (cfg["ev_p_max"] * cfg["ev_eta_c"] * (t_dep[i] - t_arr[i]) * dt_h * max(will[i], 0.1))
-        max_soc = soc_arr[i] + max_kwh / e_cap[i]
-        soc_dep[i] = min(soc_dep[i], max_soc)
-        soc_dep[i] = max(soc_dep[i], soc_arr[i])
-        if t_dep[i] <= t_arr[i]:
-            t_arr[i], t_dep[i] = 0, 1
-            soc_arr[i] = soc_dep[i] = 0.5
+    # 辅助生成函数
+    def _gen_sub_fleet(n_sub, is_private):
+        if n_sub <= 0: return None
+        
+        if is_private:
+            # 私家车：早晚高峰到达，停留时间长(10-14h)，充放电意愿低(Beta 2,5)
+            peaks = [(8.0, 1.0, 0.4), (18.0, 1.5, 0.6)]
+            dwell_mean, dwell_std = 12.0, 2.0
+            will_a, will_b = 2.0, 5.0
+        else:
+            # 营运车：中午和傍晚频繁补电，停留时间短(2-4h)，意愿极高(Beta 5,2)
+            peaks = [(12.0, 2.0, 0.5), (19.0, 2.0, 0.5)]
+            dwell_mean, dwell_std = 3.0, 1.0
+            will_a, will_b = 5.0, 2.0
 
-    return {
-        "n_ev": n_ev, "e_cap": e_cap, "soc_arr": soc_arr, "soc_dep": soc_dep,
-        "will": will, "t_arr": t_arr, "t_dep": t_dep,
-        "p_chg_max": np.full(n_ev, cfg["ev_p_max"]), "p_dis_max": np.full(n_ev, cfg["ev_p_max"]),
-    }
+        w = np.array([p[2] for p in peaks]); w = w / w.sum()
+        which = rng.choice(len(peaks), size=n_sub, p=w)
+        arrivals = np.array([rng.normal(peaks[k][0], peaks[k][1]) for k in which])
+        arrivals = np.clip(arrivals, 0.0, 22.0)
+        dwell = np.clip(rng.normal(dwell_mean, dwell_std, n_sub), 1.0, 14.0)
+        departures = np.clip(arrivals + dwell, 0.0, 23.9)
+        will = rng.beta(will_a, will_b, n_sub)
+        e_cap = rng.choice(cfg["ev_cap_choices"], size=n_sub, p=cfg["ev_cap_probs"]).astype(float)
+        soc_arr = np.clip(rng.normal(cfg["ev_soc_arr_mean"], cfg["ev_soc_arr_std"], n_sub), 0.10, 0.60)
+        soc_dep = np.clip(rng.normal(cfg["ev_soc_dep_mean"], cfg["ev_soc_dep_std"], n_sub), 0.70, 0.95)
+        t_arr = np.clip((arrivals * 2).astype(int), 0, 47)
+        t_dep = np.clip((departures * 2).astype(int), 1, 48)
+
+        for i in range(n_sub):
+            dt_h = cfg["dt_h"]
+            max_kwh = (cfg["ev_p_max"] * cfg["ev_eta_c"] * (t_dep[i] - t_arr[i]) * dt_h * max(will[i], 0.1))
+            max_soc = soc_arr[i] + max_kwh / e_cap[i]
+            soc_dep[i] = min(soc_dep[i], max_soc)
+            soc_dep[i] = max(soc_dep[i], soc_arr[i])
+            if t_dep[i] <= t_arr[i]:
+                t_arr[i], t_dep[i] = 0, 1
+                soc_arr[i] = soc_dep[i] = 0.5
+                
+        return {
+            "n_ev": n_sub, "e_cap": e_cap, "soc_arr": soc_arr, "soc_dep": soc_dep,
+            "will": will, "t_arr": t_arr, "t_dep": t_dep,
+            "p_chg_max": np.full(n_sub, cfg["ev_p_max"]), "p_dis_max": np.full(n_sub, cfg["ev_p_max"]),
+        }
+
+    # 生成并合并
+    fleet_priv = _gen_sub_fleet(n_priv, True)
+    fleet_op = _gen_sub_fleet(n_op, False)
+
+    if fleet_priv is None:
+        return fleet_op
+    if fleet_op is None:
+        return fleet_priv
+        
+    # 拼接两个字典
+    merged = {"n_ev": n_ev, "is_private_mask": np.concatenate([np.ones(n_priv), np.zeros(n_op)])}
+    for k in ["e_cap", "soc_arr", "soc_dep", "will", "t_arr", "t_dep", "p_chg_max", "p_dis_max"]:
+        merged[k] = np.concatenate([fleet_priv[k], fleet_op[k]])
+    return merged
 
 def unordered_charge_profile(fleet, dt_h):
     profile = np.zeros(48)
@@ -115,7 +155,6 @@ def _build_milp(price, load, pv, fleet, cfg, mode, e_bess_init=None, e_ev_init=N
 
     m = pulp.LpProblem(f"v2g_{mode}", pulp.LpMinimize)
 
-    # ★ 全部使用位置参数传入变量名，无 name= 关键字，兼容各种新旧版本的 PuLP
     pg   = [pulp.LpVariable(f"pg_{t}",  lowBound=0) for t in range(n)]
     pg_emerg = [pulp.LpVariable(f"pg_emerg_{t}", lowBound=0) for t in range(n)]
     pc_b = [pulp.LpVariable(f"pcb_{t}", lowBound=0, upBound=pc_max) for t in range(n)]
@@ -328,6 +367,7 @@ def allocate_revenue(total_gain, cfg):
 _GLOBAL_EV_POOL = {}
 
 def _gen_ev_fleet_master(day_idx, cfg, master_n):
+    # 母车队池保持原有的单一分布即可，不影响前端展示
     rng = np.random.default_rng(cfg["seed"] + day_idx * 17)
     peaks = cfg["ev_arr_peaks"]
     w = np.array([p[2] for p in peaks]); w = w / w.sum()
@@ -335,24 +375,17 @@ def _gen_ev_fleet_master(day_idx, cfg, master_n):
     which = rng.choice(len(peaks), size=master_n, p=w)
     arrivals = np.array([rng.normal(peaks[k][0], peaks[k][1]) for k in which])
     arrivals = np.clip(arrivals, 0.0, 22.0)
-    dwell = np.clip(
-        rng.normal(cfg["ev_dwell_mean_h"], cfg["ev_dwell_std_h"], master_n),
-        cfg["ev_dwell_min_h"], cfg["ev_dwell_max_h"])
+    dwell = np.clip(rng.normal(cfg["ev_dwell_mean_h"], cfg["ev_dwell_std_h"], master_n), cfg["ev_dwell_min_h"], cfg["ev_dwell_max_h"])
     departures = np.clip(arrivals + dwell, 0.0, 23.9)
     will = rng.beta(cfg["ev_will_alpha"], cfg["ev_will_beta"], master_n)
-    e_cap = rng.choice(cfg["ev_cap_choices"], size=master_n,
-                       p=cfg["ev_cap_probs"]).astype(float)
-    soc_arr = np.clip(rng.normal(cfg["ev_soc_arr_mean"],
-                                  cfg["ev_soc_arr_std"], master_n), 0.10, 0.60)
-    soc_dep = np.clip(rng.normal(cfg["ev_soc_dep_mean"],
-                                  cfg["ev_soc_dep_std"], master_n), 0.70, 0.95)
+    e_cap = rng.choice(cfg["ev_cap_choices"], size=master_n, p=cfg["ev_cap_probs"]).astype(float)
+    soc_arr = np.clip(rng.normal(cfg["ev_soc_arr_mean"], cfg["ev_soc_arr_std"], master_n), 0.10, 0.60)
+    soc_dep = np.clip(rng.normal(cfg["ev_soc_dep_mean"], cfg["ev_soc_dep_std"], master_n), 0.70, 0.95)
     t_arr = np.clip((arrivals * 2).astype(int), 0, 47)
     t_dep = np.clip((departures * 2).astype(int), 1, 48)
 
     for i in range(master_n):
-        max_kwh = (cfg["ev_p_max"] * cfg["ev_eta_c"]
-                   * (t_dep[i] - t_arr[i]) * cfg["dt_h"]
-                   * max(will[i], 0.1))
+        max_kwh = (cfg["ev_p_max"] * cfg["ev_eta_c"] * (t_dep[i] - t_arr[i]) * cfg["dt_h"] * max(will[i], 0.1))
         max_soc = soc_arr[i] + max_kwh / e_cap[i]
         soc_dep[i] = min(soc_dep[i], max_soc)
         soc_dep[i] = max(soc_dep[i], soc_arr[i])
