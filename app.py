@@ -470,7 +470,7 @@ else:
             fig_margin.add_trace(go.Scatter(x=n_ev_list, y=per_ev_gains, mode='lines+markers', name='单车日均收益 (元/辆)', line=dict(color='#00E676', width=4), marker=dict(size=10, color='#00E5FF', line=dict(width=2, color='#0A0F1A'))))
             current_per_ev = per_ev_gains[n_ev_list.index(current_view_n_ev)] if current_view_n_ev in n_ev_list else per_ev_gains[2]
             fig_margin.add_vline(x=current_view_n_ev, line_dash="dash", line_color="#FF9100", annotation_text=f"当前设定: {current_view_n_ev}辆", annotation_position="top right")
-            fig_margin.update_layout(template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis_title="参与 V2G 的 EV 数量 (辆)", yaxis_title="单车日均收益 (元/辆·天)", margin=dict(t=40, b=20, l=20, r=20), xaxis=dict(gridcolor="rgba(255,255,255,0.05)"), yaxis=dict(gridcolor="rgba(255,255,255,0.05)"))
+            fig_margin.update_layout(template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis_title="参与 V2G 的 EV 数量 (辆)", yaxis_title="单车日均收益 (元/辆·天)", margin=dict(t=40, b=20, l=20, r=20), xaxis=dict(gridcolor="rgba(255,255,255,0.05)"), yaxis=dict(gridcolor="rgba(255,255,255,0.05)"), height=350)
             st.plotly_chart(fig_margin, use_container_width=True)
 
         st.markdown("#### 2. BESS 容量对 EV 边际效益的挤出效应")
@@ -485,7 +485,7 @@ else:
                 bess_per_ev = [tg / n if n > 0 else 0 for tg, n in zip(bess_total_gains, n_ev_list)]
                 fig_bess.add_trace(go.Scatter(x=n_ev_list, y=bess_per_ev, mode='lines+markers', name=bess_labels[i], line=dict(width=3, dash='solid' if i==1 else 'dot'), marker=dict(size=8)))
             fig_bess.add_vline(x=current_view_n_ev, line_dash="dash", line_color="#FF9100", annotation_text=f"当前设定", annotation_position="top right")
-            fig_bess.update_layout(template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis_title="参与 V2G 的 EV 数量 (辆)", yaxis_title="单车日均收益 (元/辆·天)", margin=dict(t=40, b=20, l=20, r=20), xaxis=dict(gridcolor="rgba(255,255,255,0.05)"), yaxis=dict(gridcolor="rgba(255,255,255,0.05)"), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5))
+            fig_bess.update_layout(template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis_title="参与 V2G 的 EV 数量 (辆)", yaxis_title="单车日均收益 (元/辆·天)", margin=dict(t=40, b=20, l=20, r=20), xaxis=dict(gridcolor="rgba(255,255,255,0.05)"), yaxis=dict(gridcolor="rgba(255,255,255,0.05)"), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), height=350)
             st.plotly_chart(fig_bess, use_container_width=True)
             if current_per_ev < 1:
                 st.warning(f"⚠️ **运营建议**：当前 **V2G 并没有产生额外正收益**。建议调大 EV 规模或放宽放电限制。")
@@ -497,18 +497,38 @@ else:
     # ---------- Tab 3: 日度成本与账单拆解 ----------
     with tab3:
         with st.container(border=True):
-            st.markdown("#### 📊 各场景日度运行总成本对比 (含需量电费与折旧)")
-            df_daily = res["daily_df"].copy().reset_index()
-            if "Day" not in df_daily.columns: df_daily = df_daily.rename(columns={df_daily.columns[0]: "Day"})
-            valid_cols = [c for c in ["A1", "A2", "A3", "A4"] if c in df_daily.columns]
-            fig_daily = go.Figure()
-            for i, col in enumerate(valid_cols):
-                fig_daily.add_trace(go.Bar(x=df_daily["Day"], y=df_daily[col], name=SCENARIO_LABELS.get(col, col), marker_color=FUTURE_COLORS[i], text=df_daily[col].round(0), textposition='outside', textfont=dict(size=11, color='rgba(255,255,255,0.7)')))
-            fig_daily.update_layout(barmode='group', template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=60, b=20, l=20, r=20), xaxis=dict(title="天数 (Day)", gridcolor="rgba(255,255,255,0.05)", tickmode='linear', dtick=1), yaxis=dict(title="日总成本 (元)", gridcolor="rgba(255,255,255,0.05)"), legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5))
-            st.plotly_chart(fig_daily, use_container_width=True)
+            st.markdown("#### 📊 各场景综合成本横向对比")
+            st.write("从高到低排序。**柱子越短，说明该策略对你的钱包越友好。**")
+            
+            # 提取最终总成本并排序
+            cost_df = pd.DataFrame({
+                "场景": ["A1 纯 BESS", "A2 无序充电", "A3 智能充电", "A4 纯 V2G"],
+                "总成本": [totals['A1'], totals['A2'], totals['A3'], totals['A4']],
+                "颜色": ["#00E5FF", "#FF4B4B", "#FFA500", "#00E676"]
+            }).sort_values(by="总成本", ascending=True)
+            
+            fig_rank = go.Figure(go.Bar(
+                x=cost_df["总成本"],
+                y=cost_df["场景"],
+                orientation='h',
+                marker_color=cost_df["颜色"],
+                text=cost_df["总成本"].apply(lambda x: f"{x:.0f} 元"),
+                textposition='outside',
+                textfont=dict(size=14, color='white')
+            ))
+            fig_rank.update_layout(
+                template=PLOTLY_TEMPLATE, 
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
+                margin=dict(l=20, r=100, t=20, b=20), # 右侧留白给标签
+                xaxis=dict(title="仿真期间总支出 (元)", gridcolor="rgba(255,255,255,0.05)", showticklabels=False),
+                yaxis=dict(title="", tickfont=dict(size=14), autorange="reversed"),
+                height=300,  # 固定高度，避免拉长
+                bargap=0.6,  # 增加柱子间距，让柱子变细
+            )
+            st.plotly_chart(fig_rank, use_container_width=True)
 
             st.write("---") 
-            st.subheader("🔍 V2G (A4) 单日真实账单瀑布拆解")
+            st.subheader("🔍 V2G (A4) 真实财务账单流水拆解")
             
             # 获取关键的财务指标
             df_a4 = res["df_timeseries"][res["df_timeseries"]["Scenario"] == "A4"].copy()
@@ -521,35 +541,31 @@ else:
             a4_demand_cost = res["daily_df"]["A4_DemandCost"].sum() if "A4_DemandCost" in res["daily_df"] else 0
             a4_degr_cost = res.get("ev_degradation_total", 0)
             
-            a2_buy_cost = (df_a2["Grid_Buy"] * df_a2["Price"] * 0.5).sum()
-            a2_demand_cost = res["daily_df"]["A2_DemandCost"].sum() if "A2_DemandCost" in res["daily_df"] else 0
-            a2_total_cost = a2_buy_cost + a2_demand_cost
+            a4_net_cost = a4_buy_cost - a4_sell_revenue + a4_demand_cost + a4_degr_cost
 
-            # 瀑布图逻辑：以 A2 为基础，展示如何一点点省下钱的
-            saving_energy = a2_buy_cost - a4_buy_cost
-            
             fig_waterfall = go.Figure(go.Waterfall(
-                name="V2G账单", orientation="v",
-                measure=["absolute", "relative", "relative", "relative", "relative", "total"],
-                x=["A2无序总支出(基准)", "智能调度节省", "V2G卖电收入", "需量电费(新增)", "电池寿命折损", "A4最终真实支出"],
-                y=[a2_total_cost, -saving_energy, -a4_sell_revenue, a4_demand_cost, a4_degr_cost, a4_buy_cost - a4_sell_revenue + a4_demand_cost + a4_degr_cost],
-                text=[f"{a2_total_cost:.0f}", f"-{saving_energy:.0f}", f"-{a4_sell_revenue:.0f}", f"+{a4_demand_cost:.0f}", f"+{a4_degr_cost:.0f}", f"{a4_buy_cost - a4_sell_revenue + a4_demand_cost + a4_degr_cost:.0f}"],
+                name="V2G财务流水", orientation="v",
+                measure=["relative", "relative", "relative", "relative", "total"],
+                x=["电网买电支出", "V2G卖电收入", "缴纳需量电费", "电池寿命折损", "最终真实净支出"],
+                y=[a4_buy_cost, -a4_sell_revenue, a4_demand_cost, a4_degr_cost, a4_net_cost],
+                text=[f"-{a4_buy_cost:,.0f}", f"+{a4_sell_revenue:,.0f}", f"-{a4_demand_cost:,.0f}", f"-{a4_degr_cost:,.0f}", f"{a4_net_cost:,.0f}"],
                 textposition="outside",
                 connector={"line": {"color": "rgba(255,255,255,0.2)"}},
-                decreasing={"marker": {"color": "#00E676"}}, # 绿色代表省钱/收入
-                increasing={"marker": {"color": "#FF4B4B"}}, # 红色代表支出增加
+                decreasing={"marker": {"color": "#00E676"}}, # 绿色代表帮你省钱/赚钱的项
+                increasing={"marker": {"color": "#FF4B4B"}}, # 红色代表你要掏腰包的项
                 totals={"marker": {"color": "#00E5FF"}}     # 青色代表最终结果
             ))
             fig_waterfall.update_layout(
-                title="V2G 财务账单演进 (从无序充电的混乱到 V2G 的智能)",
                 template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
-                margin=dict(t=60, b=20, l=20, r=20), 
+                margin=dict(t=60, b=40, l=20, r=20), 
                 yaxis=dict(title="金额 (元)", gridcolor="rgba(255,255,255,0.05)"),
-                xaxis=dict(title="财务科目"),
-                showlegend=False
+                xaxis=dict(title=""),
+                showlegend=False,
+                height=400, # 固定高度
+                bargap=0.5  # 加宽间距，让柱子变细
             )
             st.plotly_chart(fig_waterfall, use_container_width=True)
-            st.info(f"💡 **商业拆解**：对比 A2 无序充电的惨状，V2G 通过削峰填谷直接省下 **{saving_energy:.0f} 元** 电费，如果有额外卖电还能赚 **{a4_sell_revenue:.0f} 元**。即便扣除了设备基本电费 {a4_demand_cost:.0f} 元和电池寿命损耗 {a4_degr_cost:.0f} 元，最终系统真实掏出去的钱只有 **{a4_buy_cost - a4_sell_revenue + a4_demand_cost + a4_degr_cost:.0f} 元**。")
+            st.info(f"💡 **商业拆解**：这是 A4 策略为您打造的“真实账单”。虽然买电花了 {a4_buy_cost:.0f} 元，但卖电赚回了 {a4_sell_revenue:.0f} 元。扣除基本底薪（需量电费）{a4_demand_cost:.0f} 元和电池“精神损失费”{a4_degr_cost:.0f} 元后，**你实际只需要掏 {a4_net_cost:.0f} 元。**")
 
     # ---------- Tab 4: ⚡ 电网冲击分析 ----------
     with tab_impact:
@@ -583,7 +599,7 @@ else:
                 custom_hover_texts.append(info)
             df_a4["HoverText"] = custom_hover_texts
             fig_net.add_trace(go.Scatter(x=df_a4["Hour"], y=df_a4["Net_Load"], name="A4: V2G 调度", mode="lines", line=dict(color="#00E5FF", width=3, dash='solid'), customdata=df_a4["HoverText"], hovertemplate="%{customdata}<extra></extra>"))
-            fig_net.update_layout(title=f"Day {t_day_impact} 净负荷时序曲线与成因溯源", template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=4), yaxis=dict(title="净负荷 (kW)", gridcolor="rgba(255,255,255,0.05)"), hovermode="closest", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(l=20, r=20, t=50, b=20))
+            fig_net.update_layout(title=f"Day {t_day_impact} 净负荷时序曲线与成因溯源", template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(title="时间 (小时)", gridcolor="rgba(255,255,255,0.05)", dtick=4), yaxis=dict(title="净负荷 (kW)", gridcolor="rgba(255,255,255,0.05)"), hovermode="closest", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5), margin=dict(l=20, r=20, t=50, b=20), height=400)
             st.plotly_chart(fig_net, use_container_width=True)
 
             st.write("---")
@@ -598,7 +614,7 @@ else:
             for i, (col, name) in enumerate(metrics_map.items()):
                 fig_impact.add_trace(go.Bar(x=[SCENARIO_LABELS.get(s, s) for s in df_impact.index], y=df_impact[col], name=name, marker_color=FUTURE_COLORS[i], text=df_impact[col].apply(lambda x: f"{x:.1f}%"), textposition='outside', textfont=dict(size=12, color='white')))
             fig_impact.add_hline(y=100, line_dash="solid", line_color="#FF4B4B", line_width=2, annotation_text="A2 基准线 (100%)", annotation_position="top right", annotation_font_color="#FF4B4B")
-            fig_impact.update_layout(barmode='group', template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=60, b=20, l=20, r=20), yaxis=dict(title="相对冲击比例", gridcolor="rgba(255,255,255,0.05)", range=[80, 110]), xaxis=dict(title="调度场景"), legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5))
+            fig_impact.update_layout(barmode='group', template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=60, b=40, l=20, r=20), yaxis=dict(title="相对冲击比例", gridcolor="rgba(255,255,255,0.05)", range=[80, 110]), xaxis=dict(title="调度场景"), legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5), height=400, bargap=0.4)
             st.plotly_chart(fig_impact, use_container_width=True)
 
             # ★ 全天候多维诊断专家系统
@@ -683,7 +699,7 @@ else:
                     sun_data.append({"总收益": "总收益", "收益来源": "向电网卖电", "角色": role, "金额": total_sell * prop})
                 df_sun = pd.DataFrame(sun_data)
                 fig_pie = px.sunburst(df_sun, path=['总收益', '收益来源', '角色'], values='金额', color='收益来源', color_discrete_map={"削峰填谷降本": "#00E676", "向电网卖电": "#00E5FF"}, template=PLOTLY_TEMPLATE)
-                fig_pie.update_layout(margin=dict(t=40, b=10, l=10, r=10), paper_bgcolor="rgba(0,0,0,0)")
+                fig_pie.update_layout(margin=dict(t=40, b=10, l=10, r=10), paper_bgcolor="rgba(0,0,0,0)", height=450)
                 st.plotly_chart(fig_pie, use_container_width=True)
                 st.info(f"💡 **收益拆分说明：** 在总计 **{total_gain:.0f} 元** 的收益中，**{total_arbitrage:.0f} 元** 来自于“削峰填谷降本”，**{total_sell:.0f} 元** 来自于“向电网卖电”。")
             else:
@@ -693,7 +709,7 @@ else:
                 with c2:
                     fig_pie = px.pie(share_df, values='金额(元)', names='角色', title=f"削峰填谷降本分红 (总计 {total_gain:.0f} 元)", color_discrete_sequence=FUTURE_COLORS, hole=0.5)
                     fig_pie.update_traces(textposition='inside', texttemplate='<b>%{label}</b><br>%{value:,.0f} 元<br>(%{percent})', textfont_size=14, marker=dict(line=dict(color='#0A0F1A', width=2)))
-                    fig_pie.update_layout(template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=50, b=10, l=10, r=10), showlegend=False)
+                    fig_pie.update_layout(template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=50, b=10, l=10, r=10), showlegend=False, height=350)
                     st.plotly_chart(fig_pie, use_container_width=True)
                     st.info("💡 **收益来源说明：** 当前系统无多余电量上网，V2G 的收益主要来自“低谷充电、高峰放电”从而减少高价买电（**少花钱 = 赚钱**）。")
 
