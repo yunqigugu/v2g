@@ -76,11 +76,26 @@ with st.sidebar:
     emergency_ratio = st.slider("紧急购电惩罚倍数", 1.0, 10.0, 5.0, 0.5)
 
     st.markdown("<h2 class='sidebar-header'>📈 2. 商业与电网边界</h2>", unsafe_allow_html=True)
-    base_load_scale = st.slider("基础负荷缩放倍率", 0.5, 2.0, 1.0, 0.1, help="模拟微网负荷增大或减小")
-    pv_capacity_scale = st.slider("光伏装机缩放倍率", 0.5, 2.0, 1.0, 0.1, help="模拟光伏装机规模变化")
-    demand_charge_rate = st.number_input("需量电费 (元/kW·天)", min_value=0.0, max_value=100.0, value=10.0, step=1.0, help="按每天的最大净负荷收取的基本电费")
-    degradation_cost = st.number_input("V2G电池折损成本 (元/kWh)", min_value=0.0, max_value=1.0, value=0.20, step=0.05, help="每放出1度电，折算的电池寿命成本")
-    discount_rate = st.slider("投资折现率 (%)", 1.0, 15.0, 8.0, 0.5) / 100.0
+    base_load_scale = st.slider(
+        "基础负荷缩放倍率", 0.5, 2.0, 1.0, 0.1, 
+        help="【通俗解释】调节微网本身的用电需求。\n\n👉 **调大 (如1.5)**：相当于夏天工厂全开、空调猛吹，微网严重缺电，V2G 削峰的价值飙升。\n\n👉 **调小 (如0.8)**：相当于节假日放假，用电量极少，此时系统不仅不缺电，可能还会因为光伏发电过多而“反送电”给电网。"
+    )
+    pv_capacity_scale = st.slider(
+        "光伏装机缩放倍率", 0.5, 2.0, 1.0, 0.1, 
+        help="【通俗解释】调节屋顶光伏板的总面积/数量。\n\n👉 **调大**：中午发电猛增，容易造成变压器反向超载，算法会疯狂让 V2G 车辆在中午充电来消纳绿电。\n\n👉 **调小**：相当于阴雨天或光伏板少，系统白天更依赖向电网买电。"
+    )
+    demand_charge_rate = st.number_input(
+        "需量电费 (元/kW·天)", min_value=0.0, max_value=100.0, value=10.0, step=1.0, 
+        help="【通俗解释】微网的“基本底薪”惩罚机制。\n\n电网不管你用了多少度电，只看你当天**瞬间最高功率**。瞬间冲高一次，就要交巨额罚款。\n\n👉 **调高**：算法会变得极度害怕出现尖峰，宁愿不赚钱也要削峰填谷；**调低**：算法会放飞自我，只追求一度电几毛钱的差价。"
+    )
+    degradation_cost = st.number_input(
+        "V2G电池折损成本 (元/kWh)", min_value=0.0, max_value=1.0, value=0.20, step=0.05, 
+        help="【通俗解释】每次让车放电，电池都会“折寿”。这里是给电池定的“精神损失费”。\n\n👉 **调高 (如0.5)**：算法会认为“赚的钱还不够赔电池的”，从而大幅减少放电，保护电池。\n\n👉 **调低 (如0)**：算法会变成“资本主义狂魔”，为了套利把电池榨干。"
+    )
+    discount_rate = st.slider(
+        "投资折现率 (%)", 1.0, 15.0, 8.0, 0.5, 
+        help="【通俗解释】通货膨胀/资金的机会成本。\n\n钱放在银行是有利息的，明天的100块不如今天的100块值钱。\n\n👉 **调高**：代表当前经济环境通胀严重，收回设备改造成本的年限会被拉长（动态回收期变长）。"
+    ) / 100.0
 
     st.markdown("<h2 class='sidebar-header'>🚗 3. 车队结构与设备投资</h2>", unsafe_allow_html=True)
     enable_ev_split = st.checkbox("开启车队分类模拟 (私家车 vs 运营车)", value=False)
