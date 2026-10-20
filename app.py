@@ -514,16 +514,16 @@ else:
                 marker_color=cost_df["颜色"],
                 text=cost_df["总成本"].apply(lambda x: f"{x:.0f} 元"),
                 textposition='outside',
-                textfont=dict(size=14, color='white')
+                textfont=dict(size=14, color='white'),
+                width=0.5 # ★ 控制柱子粗细
             ))
             fig_rank.update_layout(
                 template=PLOTLY_TEMPLATE, 
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
-                margin=dict(l=20, r=100, t=20, b=20), # 右侧留白给标签
+                margin=dict(l=20, r=100, t=20, b=20), 
                 xaxis=dict(title="仿真期间总支出 (元)", gridcolor="rgba(255,255,255,0.05)", showticklabels=False),
                 yaxis=dict(title="", tickfont=dict(size=14), autorange="reversed"),
-                height=300,  # 固定高度，避免拉长
-                bargap=0.6,  # 增加柱子间距，让柱子变细
+                height=280,  # 缩减高度，更紧凑
             )
             st.plotly_chart(fig_rank, use_container_width=True)
 
@@ -543,27 +543,32 @@ else:
             
             a4_net_cost = a4_buy_cost - a4_sell_revenue + a4_demand_cost + a4_degr_cost
 
+            # ★ 修复瀑布图逻辑和外观
             fig_waterfall = go.Figure(go.Waterfall(
                 name="V2G财务流水", orientation="v",
                 measure=["relative", "relative", "relative", "relative", "total"],
-                x=["电网买电支出", "V2G卖电收入", "缴纳需量电费", "电池寿命折损", "最终真实净支出"],
+                x=["1. 电网买电支出", "2. V2G卖电收入", "3. 需量基本电费", "4. 电池寿命折损", "最终真实净支出"],
                 y=[a4_buy_cost, -a4_sell_revenue, a4_demand_cost, a4_degr_cost, a4_net_cost],
-                text=[f"-{a4_buy_cost:,.0f}", f"+{a4_sell_revenue:,.0f}", f"-{a4_demand_cost:,.0f}", f"-{a4_degr_cost:,.0f}", f"{a4_net_cost:,.0f}"],
+                text=[f"+{a4_buy_cost:,.0f}", f"-{a4_sell_revenue:,.0f}", f"+{a4_demand_cost:,.0f}", f"+{a4_degr_cost:,.0f}", f"{a4_net_cost:,.0f}"],
                 textposition="outside",
-                connector={"line": {"color": "rgba(255,255,255,0.2)"}},
-                decreasing={"marker": {"color": "#00E676"}}, # 绿色代表帮你省钱/赚钱的项
-                increasing={"marker": {"color": "#FF4B4B"}}, # 红色代表你要掏腰包的项
-                totals={"marker": {"color": "#00E5FF"}}     # 青色代表最终结果
+                connector={"line": {"color": "rgba(255,255,255,0.3)", "width": 2}},
+                decreasing={"marker": {"color": "#00E676", "line": {"color": "#00E676", "width": 1}}}, # 绿色代表省钱/收入
+                increasing={"marker": {"color": "#FF4B4B", "line": {"color": "#FF4B4B", "width": 1}}}, # 红色代表花钱
+                totals={"marker": {"color": "#00E5FF", "line": {"color": "#00E5FF", "width": 1}}}     # 青色代表最终结果
             ))
             fig_waterfall.update_layout(
                 template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
                 margin=dict(t=60, b=40, l=20, r=20), 
                 yaxis=dict(title="金额 (元)", gridcolor="rgba(255,255,255,0.05)"),
-                xaxis=dict(title=""),
+                xaxis=dict(title="", tickfont=dict(size=13)),
                 showlegend=False,
-                height=400, # 固定高度
-                bargap=0.5  # 加宽间距，让柱子变细
+                height=420, 
+                width=None, # 不强制设宽，但在 x 轴添加间隔
+                bargap=0.6, # ★ 强制加宽间距，让柱子变细
             )
+            # 使用 width 属性强行控制柱子宽度
+            fig_waterfall.data[0].width = 0.35 
+            
             st.plotly_chart(fig_waterfall, use_container_width=True)
             st.info(f"💡 **商业拆解**：这是 A4 策略为您打造的“真实账单”。虽然买电花了 {a4_buy_cost:.0f} 元，但卖电赚回了 {a4_sell_revenue:.0f} 元。扣除基本底薪（需量电费）{a4_demand_cost:.0f} 元和电池“精神损失费”{a4_degr_cost:.0f} 元后，**你实际只需要掏 {a4_net_cost:.0f} 元。**")
 
@@ -612,9 +617,9 @@ else:
             metrics_map = {"peak_kw_pct": "最大峰值负荷", "p2v_kw_pct": "峰谷差", "std_kw_pct": "负荷波动标准差"}
             fig_impact = go.Figure()
             for i, (col, name) in enumerate(metrics_map.items()):
-                fig_impact.add_trace(go.Bar(x=[SCENARIO_LABELS.get(s, s) for s in df_impact.index], y=df_impact[col], name=name, marker_color=FUTURE_COLORS[i], text=df_impact[col].apply(lambda x: f"{x:.1f}%"), textposition='outside', textfont=dict(size=12, color='white')))
+                fig_impact.add_trace(go.Bar(x=[SCENARIO_LABELS.get(s, s) for s in df_impact.index], y=df_impact[col], name=name, marker_color=FUTURE_COLORS[i], text=df_impact[col].apply(lambda x: f"{x:.1f}%"), textposition='outside', textfont=dict(size=12, color='white'), width=0.25))
             fig_impact.add_hline(y=100, line_dash="solid", line_color="#FF4B4B", line_width=2, annotation_text="A2 基准线 (100%)", annotation_position="top right", annotation_font_color="#FF4B4B")
-            fig_impact.update_layout(barmode='group', template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=60, b=40, l=20, r=20), yaxis=dict(title="相对冲击比例", gridcolor="rgba(255,255,255,0.05)", range=[80, 110]), xaxis=dict(title="调度场景"), legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5), height=400, bargap=0.4)
+            fig_impact.update_layout(barmode='group', template=PLOTLY_TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=60, b=40, l=20, r=20), yaxis=dict(title="相对冲击比例", gridcolor="rgba(255,255,255,0.05)", range=[80, 110]), xaxis=dict(title="调度场景"), legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5), height=400, bargap=0.6)
             st.plotly_chart(fig_impact, use_container_width=True)
 
             # ★ 全天候多维诊断专家系统
@@ -678,7 +683,6 @@ else:
             c_kpi1.metric("双向设备总改造成本", f"{total_infra:.0f} 元")
             c_kpi2.metric("日均 V2G 净套利收益", f"{daily_net_gain:.0f} 元/天")
             
-            # 修复：单位改为正确的天数
             if dynamic_payback_years < 1:
                 c_kpi3.metric("动态投资回收期(含折现)", f"{dynamic_payback_years * 365:.0f} 天", delta="极优", delta_color="normal")
             elif dynamic_payback_years < 10:
